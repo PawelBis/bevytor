@@ -1,31 +1,20 @@
-use crate::editor::asset_loader::{AssetLoaderPlugin, GameAssets};
-use crate::WindowSize;
-use bevy::app::PluginGroupBuilder;
-use bevy::prelude::*;
-use bevy_egui::egui::style::DebugOptions;
-use bevy_egui::egui::style::Margin;
-use bevy_egui::{egui, EguiContext};
+use bevy::app::{App, Plugin};
+use bevy::ecs::system::{Res, ResMut};
+use bevy_egui::{
+    egui::{self, Vec2},
+    EguiContext
+};
+use crate::asset_loader::GameAssets;
 
-struct Initialized {
-    is: bool,
-}
-
-pub struct EditorPlugins;
-impl PluginGroup for EditorPlugins {
-    fn build(&mut self, group: &mut PluginGroupBuilder) {
-        group.add(AssetLoaderPlugin).add(AssetWindowPlugin);
-    }
-}
-
-pub struct AssetWindowPlugin;
-impl Plugin for AssetWindowPlugin {
+pub struct AssetBrowserPlugin;
+impl Plugin for AssetBrowserPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system(content_browser_system);
+        app.add_system(asset_browser_system);
     }
 }
 
 const CONTENT_BROWSER_THUMBNAIL_SIZE: egui::Vec2 = egui::Vec2::new(150.0, 150.0);
-fn content_browser_system(mut egui_context: ResMut<EguiContext>, game_assets: Res<GameAssets>) {
+fn asset_browser_system(mut egui_context: ResMut<EguiContext>, game_assets: Res<GameAssets>) {
     let draw_image_line = |ui: &mut egui::Ui| {
         ui.with_layout(
             egui::Layout::left_to_right()
