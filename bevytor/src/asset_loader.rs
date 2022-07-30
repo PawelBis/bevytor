@@ -12,8 +12,7 @@ pub struct AssetLoaderPlugin;
 
 impl Plugin for AssetLoaderPlugin {
     fn build(&self, app: &mut App) {
-        app//.insert_resource(GameAssets::default())
-            .add_startup_system(load_assets_system);
+        app.add_startup_system(load_assets_system);
     }
 }
 
@@ -35,6 +34,8 @@ pub enum AssetType {
 }
 
 impl AssetType {
+    /// Tries to create asset from given path.
+    /// TODO: Make extension detection more sophisticated
     fn try_create(
         path: &Path,
         asset_server: &AssetServer,
@@ -65,7 +66,8 @@ impl AssetType {
     }
 }
 
-// TODO: Change to generic treelike type
+/// Stores data about directory and supported assets contained within it
+/// TODO: Change to generic treelike type
 #[derive(Debug)]
 pub struct AssetDirectory {
     /// Name of the directory
@@ -88,7 +90,7 @@ impl AssetDirectory {
         }
     }
 
-    /// Checks if child is indeed child of this directory or any directory underneath
+    /// Checks if path is supported asset or directory and adds it to proper category
     /// and inserts it if so
     fn try_insert(
         &mut self,
@@ -105,42 +107,45 @@ impl AssetDirectory {
         }
     }
 
+    /// Checks if given directory is child of any directory in the hierarchy and
+    /// stores it if it's true. Returns given directory back in case of error
     fn try_insert_directory(&mut self, potential_child: AssetDirectory) -> Result<(), AssetDirectory> {
         if self.path == potential_child.path.parent().unwrap() {
             self.children_directories.push(potential_child);
             return Ok(());
         }
 
-        let mut pot_child = potential_child;
+        let mut potential_child = potential_child;
         for child in self.children_directories.iter_mut() {
-            match child.try_insert_directory(pot_child) {
+            match child.try_insert_directory(potential_child) {
                 Ok(_) => return Ok(()),
                 Err(err_child) => {
-                    pot_child = err_child;
+                    potential_child = err_child;
                 }
             }
         }
-
-        Err(pot_child)
+        Err(potential_child)
     }
 
+    /// Checks if an asset is child of any of the directories in the hierarchy
+    /// TODO: Both try_insert_functions are basically the same and could be reduced to one fn
     fn try_insert_asset(&mut self, potential_child: AssetType) -> Result<(), AssetType> {
         if self.path == potential_child.path().parent().unwrap() {
             self.assets.push(potential_child);
             return Ok(());
         }
 
-        let mut pot_child = potential_child;
+        let mut potential_child = potential_child;
         for child in self.children_directories.iter_mut() {
-            match child.try_insert_asset(pot_child) {
+            match child.try_insert_asset(potential_child) {
                 Ok(_) => return Ok(()),
                 Err(err_child) => {
-                    pot_child = err_child;
+                    potential_child = err_child;
                 }
             }
         }
 
-        Err(pot_child)
+        Err(potential_child)
     }
 }
 
@@ -150,6 +155,7 @@ pub fn load_assets_system(
     mut egui_ctx: ResMut<EguiContext>,
 ) {
     const ASSET_DIRECTORY_NAME: &str = "assets";
+    // TODO: Game asset directory should be editable per editor project
     const GAME_DIRECTORY_NAME: &str = "game";
     let asset_dir = env::current_dir()
         .unwrap()
@@ -164,15 +170,5 @@ pub fn load_assets_system(
         root.try_insert(entry.path(), &asset_server, &mut egui_ctx);
     }
 
-    let path = &root.path;
-    let files_count = root.assets.len();
-    let dir_count = root.children_directories.len();
-    println!("Directory {:?} contains {} children dir and {} assets!", path, dir_count, files_count);
-    for dir in root.children_directories.iter() {
-        let path = &dir.path;
-        let files_count = dir.assets.len();
-        let dir_count = dir.children_directories.len();
-        println!("Directory {:?} contains {} children dir and {} assets!", path, dir_count, files_count);
-    }
     commands.insert_resource(root);
 }
