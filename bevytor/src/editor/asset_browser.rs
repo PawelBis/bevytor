@@ -1,50 +1,71 @@
 use bevy::app::{App, Plugin};
 use bevy::ecs::system::{Res, ResMut};
 use bevy_egui::{
-    egui::{self, Vec2},
+    egui::{Vec2, Layout, Ui, Align, panel::{TopBottomPanel, SidePanel}},
     EguiContext
 };
-use crate::asset_loader::GameAssets;
 
 pub struct AssetBrowserPlugin;
 impl Plugin for AssetBrowserPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system(asset_browser_system);
+        app
+            .insert_resource(AssetBrowserSettings::default())
+            .add_system(asset_browser_system);
     }
 }
 
-const CONTENT_BROWSER_THUMBNAIL_SIZE: egui::Vec2 = egui::Vec2::new(150.0, 150.0);
-fn asset_browser_system(mut egui_context: ResMut<EguiContext>, game_assets: Res<GameAssets>) {
-    let draw_image_line = |ui: &mut egui::Ui| {
-        ui.with_layout(
-            egui::Layout::left_to_right()
-                .with_cross_align(egui::Align::Min)
-                .with_main_wrap(true),
-            |ui| {
-                // TODO: Use space left for sidebar
-                let avail_space = ui.available_size_before_wrap();
-                let images_per_row_raw = avail_space.x / CONTENT_BROWSER_THUMBNAIL_SIZE.x;
-                let space_left = avail_space.x * images_per_row_raw.fract();
+struct AssetBrowserSettings {
+    thumbnails_per_row: u32,
+}
 
-                for img in game_assets.images.values() {
-                    let image_button = egui::widgets::ImageButton::new(
-                        img.egui_texture_id,
-                        CONTENT_BROWSER_THUMBNAIL_SIZE,
-                    );
-                    ui.add(image_button);
-                }
-            },
-        );
-        true
-    };
+impl Default for AssetBrowserSettings {
+    fn default() -> Self {
+        Self {
+            thumbnails_per_row: 8,
+        }
+    }
+}
 
-    egui::panel::TopBottomPanel::bottom("ConentBrowserPanel")
+const DEFAULT_EGUI_MARGIN: Vec2 = Vec2::new(16.0, 16.0);
+fn draw_images(
+    mut ui: &mut Ui,
+    images_per_row: u32,
+) {
+    ui.with_layout(
+        Layout::left_to_right()
+            .with_cross_align(Align::Min)
+            .with_main_wrap(true),
+        |ui| {
+            let available_space = ui.available_size_before_wrap();
+            let thumbnail_size = available_space.x / 8.0;
+            //for img in game_assets.images.values() {
+            //    let image_button = egui::widgets::ImageButton::new(
+            //        img.egui_texture_id,
+            //        Vec2::new(thumbnail_size - DEFAULT_EGUI_MARGIN.x,
+            //                  thumbnail_size - DEFAULT_EGUI_MARGIN.y
+            //        )
+            //    );
+
+            //    ui.add(image_button);
+            //}
+        },
+    );
+}
+
+fn asset_browser_system(
+    mut egui_context: ResMut<EguiContext>,
+    mut settings: ResMut<AssetBrowserSettings>,
+) {
+
+    TopBottomPanel::bottom("ConentBrowserPanel")
         .resizable(true)
         .show(egui_context.ctx_mut(), |ui| {
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    draw_image_line(ui);
-                });
+            SidePanel::left("ContentBrowserFileSystem")
+                .min_width(500.0)
+                .show_inside(ui, |ui| {});
+
+            //egui::ScrollArea::vertical()
+            //    .auto_shrink([false, false])
+            //    .show(ui, |ui| draw_images(ui, &game_assets, settings.thumbnails_per_row));
         });
 }
