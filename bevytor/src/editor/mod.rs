@@ -10,6 +10,7 @@ use crate::asset_loader::AssetLoaderPlugin;
 use crate::editor::asset_browser::AssetBrowserPlugin;
 
 pub mod asset_browser;
+pub mod widgets;
 
 pub struct EditorPlugins;
 impl PluginGroup for EditorPlugins {

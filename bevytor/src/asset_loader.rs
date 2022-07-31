@@ -161,11 +161,19 @@ impl AssetDirectory {
             for child in self.children_directories.iter() {
                 if pred(child) {
                     return Some(&child);
+                } else {
+                    return child.find_by_predicate(pred)
                 }
             }
         }
 
         None
+    }
+
+    pub fn find_by_path(&self, path: &PathBuf) -> Option<&AssetDirectory> {
+        self.find_by_predicate(
+            |dir| dir.path == *path
+        )
     }
 
     pub fn find_by_predicate_mut(

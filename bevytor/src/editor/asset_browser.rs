@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use bevy::app::{App, Plugin};
 use bevy::asset::Asset;
 use bevy::ecs::system::{Res, ResMut};
@@ -5,9 +6,11 @@ use bevy_egui::{
     egui::{Vec2, Layout, ColorImage, ImageButton, Ui, Align, panel::{TopBottomPanel, SidePanel}},
     EguiContext
 };
-use bevy_egui::egui::{CollapsingHeader, ScrollArea, TextureId};
+use bevy_egui::egui::{CollapsingHeader, Response, ScrollArea, TextureId};
 use bevy_egui::egui::collapsing_header::CollapsingState;
+use bevy_egui::egui::WidgetType::Button;
 use crate::asset_loader::{AssetDirectory, AssetType, EditorAssets};
+use crate::editor::widgets::Thumbnail;
 
 pub struct AssetBrowserPlugin;
 impl Plugin for AssetBrowserPlugin {
@@ -68,9 +71,13 @@ fn draw_directory_hierarchy(
     let id = ui.make_persistent_id(directory_name);
     CollapsingState::load_with_default_open(ui.ctx(), id, false)
         .show_header(ui, |ui| {
-            if ui.button(directory_name).clicked() {
+            let response = ui.button(directory_name);
+            if response.clicked() {
                 let new_selected: SelectedDirectory = asset_directory.into();
                 selected_directory.details = new_selected.details;
+            }
+            if response.double_clicked() {
+                // TODO: colapse or expand
             }
         })
         .body(|ui| {
@@ -93,8 +100,8 @@ fn draw_assets(
     images_per_row: u32,
     asset_directory: &AssetDirectory,
     directory_texture: TextureId,
-    mut selected_directory: &mut SelectedDirectory,
-) {
+) -> Option<PathBuf> {
+    let mut selected_directory_path: Option<PathBuf> = None;
     ui.with_layout(
         Layout::left_to_right()
             .with_cross_align(Align::Min)
@@ -103,37 +110,32 @@ fn draw_assets(
             let available_space = ui.available_size_before_wrap();
             let thumbnail_size = available_space.x / images_per_row as f32;
                 for d in asset_directory.children_directories.iter() {
-                    //ui.with_layout(Layout::top_down(Align::Min), |ui| {
-                        let image_button = ImageButton::new(
-                            directory_texture,
-                            Vec2::new(thumbnail_size - DEFAULT_EGUI_MARGIN.x,
-                                      thumbnail_size - DEFAULT_EGUI_MARGIN.y
-                            )
-                        );
-                        if ui.add(image_button).double_clicked() {
-                            selected_directory.details = SelectedDirectory::from(d).details;
+                        let image_button = Thumbnail {
+                            label: d.name.to_string_lossy().to_string(),
+                            size: Vec2::splat(thumbnail_size) - DEFAULT_EGUI_MARGIN,
+                            texture_id: directory_texture,
+                            selected: false,
                         };
-                        //ui.label(d.name.to_string_lossy().to_string());
-                    //});
+                        if ui.add(image_button).double_clicked() {
+                            selected_directory_path = Some(d.path.to_path_buf());
+                        };
                 }
 
             for asset in asset_directory.assets.iter() {
                 if let AssetType::Image(img) = asset {
-                    //ui.with_layout(Layout::top_down(Align::Min), |ui| {
-                        let image_button = ImageButton::new(
-                            img.egui_texture_id,
-                            Vec2::new(thumbnail_size - DEFAULT_EGUI_MARGIN.x,
-                                      thumbnail_size - DEFAULT_EGUI_MARGIN.y
-                            )
-                        );
-
-                        ui.add(image_button);
-                    //    ui.label(img.name.to_string_lossy().to_string());
-                    //});
+                    let thumbnail = Thumbnail {
+                        label: img.name.to_string_lossy().to_string(),
+                        size: Vec2::splat(thumbnail_size) - DEFAULT_EGUI_MARGIN,
+                        texture_id: img.egui_texture_id,
+                        selected: false,
+                    };
+                    ui.add(thumbnail);
                 }
             }
         },
     );
+
+    selected_directory_path
 }
 
 fn asset_browser_system(
@@ -169,7 +171,17 @@ fn asset_browser_system(
                         Some(dir) => dir.clone(),
                         None => assets_directory.clone(),
                     };
-                    draw_assets(ui, settings.thumbnails_per_row, &selected, editor_assets.directory_icon, &mut selected_directory);
+                    if let Some (selected_path) = draw_assets(
+                        ui,
+                        settings.thumbnails_per_row,
+                        &selected,
+                        editor_assets.directory_icon,
+                    ) {
+                        println!("{:?}", selected_path);
+                        if let Some(selected_dir) = assets_directory.find_by_path(&selected_path) {
+                            selected_directory.details = SelectedDirectory::from(selected_dir).details;
+                        }
+                    };
                 })
         });
     ctx.set_style(current_style);
