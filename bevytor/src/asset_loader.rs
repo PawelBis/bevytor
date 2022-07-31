@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_egui::egui::TextureId;
+use bevy_egui::egui::{TextureId, ColorImage};
 use bevy_egui::EguiContext;
 use std::env;
 use std::ffi::OsString;
@@ -12,11 +12,13 @@ pub struct AssetLoaderPlugin;
 
 impl Plugin for AssetLoaderPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(load_assets_system);
+        app
+            .add_startup_system(load_editor_assets_system)
+            .add_startup_system(load_assets_system);
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ImageAssetDescriptor {
     /// Name of the asset, with extension
     pub name: OsString,
@@ -28,7 +30,7 @@ pub struct ImageAssetDescriptor {
     pub egui_texture_id: TextureId,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AssetType {
     Image(ImageAssetDescriptor),
 }
@@ -68,7 +70,7 @@ impl AssetType {
 
 /// Stores data about directory and supported assets contained within it
 /// TODO: Change to generic treelike type
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AssetDirectory {
     /// Name of the directory
     pub name: OsString,
@@ -147,13 +149,78 @@ impl AssetDirectory {
 
         Err(potential_child)
     }
+
+    /// Find currently selected directory
+    pub fn find_by_predicate (
+        &self,
+        pred: impl Fn(&AssetDirectory) -> bool
+    ) -> Option<&AssetDirectory> {
+        if pred(self) {
+            return Some(&self);
+        } else {
+            for child in self.children_directories.iter() {
+                if pred(child) {
+                    return Some(&child);
+                }
+            }
+        }
+
+        None
+    }
+
+    pub fn find_by_predicate_mut(
+        &mut self,
+        pred: impl Fn(&mut AssetDirectory) -> bool
+    ) -> Option<&mut AssetDirectory> {
+        if pred(self) {
+            return Some(self);
+        } else {
+            for child in self.children_directories.iter_mut() {
+                if pred(child) {
+                    return Some(child);
+                }
+            }
+        }
+
+        None
+    }
 }
+
+pub struct EditorAssets {
+    pub directory_icon: TextureId,
+}
+
+fn load_editor_assets_system(
+    mut commands: Commands,
+    mut egui_context: ResMut<EguiContext>,
+    mut asset_server: ResMut<AssetServer>,
+) {
+    println!("Loading editor assets");
+    const EDITOR_ASSETS_DIRECTORY: &str = "assets";
+    const EDITOR_NAME: &str = "bevytor";
+    let editor_assets_dir = env::current_dir()
+        .unwrap()
+        .join(EDITOR_NAME)
+        .join(EDITOR_ASSETS_DIRECTORY);
+    let bevy_handle: Handle<Image> = asset_server.load(
+        editor_assets_dir
+            .join("folder.png")
+            .as_path()
+    );
+    let editor_assets = EditorAssets {
+        directory_icon: egui_context
+            .add_image(bevy_handle),
+    };
+    commands.insert_resource(editor_assets);
+}
+
 
 pub fn load_assets_system(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut egui_ctx: ResMut<EguiContext>,
 ) {
+    println!("Loading assets");
     const ASSET_DIRECTORY_NAME: &str = "assets";
     // TODO: Game asset directory should be editable per editor project
     const GAME_DIRECTORY_NAME: &str = "game";
