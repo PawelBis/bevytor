@@ -1,6 +1,4 @@
-use bevy_egui::egui;
-use bevy_egui::egui::{Align2, Color32, FontId, ImageButton, Pos2, Vec2, Response, Ui, Widget, TextureId, Image, Sense, Rounding, Rect, WidgetInfo, WidgetType};
-use bevy_egui::egui::style::WidgetVisuals;
+use bevy_egui::egui::{Color32, FontId, Vec2, Response, Ui, Widget, TextureId, Image, Sense, Rounding, Rect, WidgetInfo, WidgetType};
 
 pub struct Thumbnail {
     pub size: Vec2,

@@ -1,14 +1,12 @@
 use std::path::PathBuf;
 use bevy::app::{App, Plugin};
-use bevy::asset::Asset;
 use bevy::ecs::system::{Res, ResMut};
 use bevy_egui::{
-    egui::{Vec2, Layout, ColorImage, ImageButton, Ui, Align, panel::{TopBottomPanel, SidePanel}},
+    egui::{Vec2, Layout, Ui, Align, panel::{TopBottomPanel, SidePanel}},
     EguiContext
 };
-use bevy_egui::egui::{CollapsingHeader, Response, ScrollArea, TextureId};
+use bevy_egui::egui::{ScrollArea, TextureId};
 use bevy_egui::egui::collapsing_header::CollapsingState;
-use bevy_egui::egui::WidgetType::Button;
 use crate::asset_loader::{AssetDirectory, AssetType, EditorAssets};
 use crate::editor::widgets::Thumbnail;
 
@@ -63,9 +61,9 @@ impl Default for AssetBrowserSettings {
 }
 
 fn draw_directory_hierarchy(
-    mut ui: &mut Ui,
+    ui: &mut Ui,
     asset_directory: &AssetDirectory,
-    mut selected_directory: &mut SelectedDirectory,
+    selected_directory: &mut SelectedDirectory,
 ) {
     let directory_name = &asset_directory.name.to_string_lossy().to_string();
     let id = ui.make_persistent_id(directory_name);
@@ -96,7 +94,7 @@ fn draw_directory_hierarchy(
 
 const DEFAULT_EGUI_MARGIN: Vec2 = Vec2::new(16.0, 16.0);
 fn draw_assets(
-    mut ui: &mut Ui,
+    ui: &mut Ui,
     images_per_row: u32,
     asset_directory: &AssetDirectory,
     directory_texture: TextureId,
@@ -122,15 +120,14 @@ fn draw_assets(
                 }
 
             for asset in asset_directory.assets.iter() {
-                if let AssetType::Image(img) = asset {
-                    let thumbnail = Thumbnail {
-                        label: img.name.to_string_lossy().to_string(),
-                        size: Vec2::splat(thumbnail_size) - DEFAULT_EGUI_MARGIN,
-                        texture_id: img.egui_texture_id,
-                        selected: false,
-                    };
-                    ui.add(thumbnail);
-                }
+                let AssetType::Image(img) = asset;
+                let thumbnail = Thumbnail {
+                    label: img.name.to_string_lossy().to_string(),
+                    size: Vec2::splat(thumbnail_size) - DEFAULT_EGUI_MARGIN,
+                    texture_id: img.egui_texture_id,
+                    selected: false,
+                };
+                ui.add(thumbnail);
             }
         },
     );
@@ -140,12 +137,12 @@ fn draw_assets(
 
 fn asset_browser_system(
     mut egui_context: ResMut<EguiContext>,
-    mut settings: ResMut<AssetBrowserSettings>,
-    mut assets_directory: ResMut<AssetDirectory>,
+    settings: ResMut<AssetBrowserSettings>,
+    assets_directory: ResMut<AssetDirectory>,
     mut selected_directory: ResMut<SelectedDirectory>,
     editor_assets: Res<EditorAssets>,
 ) {
-    let mut ctx = egui_context.ctx_mut();
+    let ctx = egui_context.ctx_mut();
     let current_style = (*ctx.style()).clone();
     let mut new_style = current_style.clone();
     new_style.visuals.button_frame = false;

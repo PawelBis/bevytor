@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_egui::egui::{TextureId, ColorImage};
+use bevy_egui::egui::TextureId;
 use bevy_egui::EguiContext;
 use std::env;
 use std::ffi::OsString;
@@ -201,7 +201,7 @@ pub struct EditorAssets {
 fn load_editor_assets_system(
     mut commands: Commands,
     mut egui_context: ResMut<EguiContext>,
-    mut asset_server: ResMut<AssetServer>,
+    asset_server: ResMut<AssetServer>,
 ) {
     println!("Loading editor assets");
     const EDITOR_ASSETS_DIRECTORY: &str = "assets";
