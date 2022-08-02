@@ -1,5 +1,10 @@
-use bevy_egui::egui::{Color32, FontId, Vec2, Response, Ui, Widget, TextureId, Image, Sense, Rounding, Rect, WidgetInfo, WidgetType};
+use bevy_egui::egui::{
+    Pos2, Color32, FontId, Vec2, Response, Ui, Widget, TextureId, Image,
+    Sense, Rounding, Rect, WidgetInfo, WidgetType, Window,
+};
+use std::default::Default;
 
+#[derive(Default)]
 pub struct Thumbnail {
     pub size: Vec2,
     pub texture_id: TextureId,
@@ -28,7 +33,7 @@ impl Widget for Thumbnail {
             Vec2::ZERO
         };
         let padded_size = image.size() + 2.0 * padding;
-        let (rect, response) = ui.allocate_exact_size(padded_size + Vec2::new(0.0, label_height), sense);
+        let (rect, mut response) = ui.allocate_exact_size(padded_size + Vec2::new(0.0, label_height), sense);
         let image_rect = Rect::from_min_max(rect.min, rect.max - Vec2::new(0.0, label_height));
         response.widget_info(|| WidgetInfo::new(WidgetType::ImageButton));
 
@@ -75,6 +80,8 @@ impl Widget for Thumbnail {
 
             let label_part = rect.width() / label_width;
             if label_part < 1.0 {
+                // Display whole label as tooltip if width of the thumbnail doesn't allow for displaying it
+                response = response.on_hover_text(self.label.clone());
                 let new_len_raw = (self.label.chars().count() as f32 * label_part).trunc() as usize;
                 let new_len =  if new_len_raw > 2 {
                     new_len_raw - 2
@@ -96,4 +103,15 @@ impl Widget for Thumbnail {
 
         response
     }
+}
+
+pub fn thumbnail(ui: &mut Ui, label: String, size: Vec2, texture_id: TextureId, ) -> Response {
+    let image_button = Thumbnail {
+        label: label.clone(),
+        size,
+        texture_id,
+        selected: false,
+        ..Default::default()
+    };
+    ui.add(image_button)
 }

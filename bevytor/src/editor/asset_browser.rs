@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use bevy::app::{App, Plugin};
 use bevy::ecs::system::{Res, ResMut};
 use bevy_egui::{
@@ -8,7 +7,8 @@ use bevy_egui::{
 use bevy_egui::egui::{ScrollArea, TextureId};
 use bevy_egui::egui::collapsing_header::CollapsingState;
 use crate::asset_loader::{AssetDirectory, AssetType, EditorAssets};
-use crate::editor::widgets::Thumbnail;
+use crate::editor::widgets;
+use std::path::PathBuf;
 
 pub struct AssetBrowserPlugin;
 impl Plugin for AssetBrowserPlugin {
@@ -74,9 +74,6 @@ fn draw_directory_hierarchy(
                 let new_selected: SelectedDirectory = asset_directory.into();
                 selected_directory.details = new_selected.details;
             }
-            if response.double_clicked() {
-                // TODO: colapse or expand
-            }
         })
         .body(|ui| {
             for child in asset_directory.children_directories.iter() {
@@ -107,25 +104,24 @@ fn draw_assets(
         |ui| {
             let available_space = ui.available_size_before_wrap();
             let thumbnail_size = available_space.x / images_per_row as f32;
-                for d in asset_directory.children_directories.iter() {
-                        let image_button = Thumbnail {
-                            label: d.name.to_string_lossy().to_string(),
-                            size: Vec2::splat(thumbnail_size) - DEFAULT_EGUI_MARGIN,
-                            texture_id: directory_texture,
-                            selected: false,
-                        };
-                        if ui.add(image_button).double_clicked() {
-                            selected_directory_path = Some(d.path.to_path_buf());
-                        };
+                for d in asset_directory.children_directories.iter().zip() {
+                    if widgets::thumbnail(
+                        ui,
+                        d.name.to_string_lossy().to_string(),
+                        Vec2::splat(thumbnail_size) - DEFAULT_EGUI_MARGIN, directory_texture
+                    ).double_clicked() {
+                        selected_directory_path = Some(d.path.to_path_buf());
+                    }
                 }
 
             for asset in asset_directory.assets.iter() {
                 let AssetType::Image(img) = asset;
-                let thumbnail = Thumbnail {
+                let thumbnail = widgets::Thumbnail {
                     label: img.name.to_string_lossy().to_string(),
                     size: Vec2::splat(thumbnail_size) - DEFAULT_EGUI_MARGIN,
                     texture_id: img.egui_texture_id,
                     selected: false,
+                    ..Default::default()
                 };
                 ui.add(thumbnail);
             }
