@@ -1,4 +1,3 @@
-pub mod asset_loader;
 pub mod editor;
 
 #[cfg(test)]

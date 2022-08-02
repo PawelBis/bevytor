@@ -1,10 +1,10 @@
 use bevy::app::{PluginGroup, PluginGroupBuilder};
 use bevy_egui::EguiPlugin;
-use crate::asset_loader::AssetLoaderPlugin;
-use crate::editor::asset_browser::AssetBrowserPlugin;
+use assets::asset_loader::AssetLoaderPlugin;
+use ui::asset_browser::AssetBrowserPlugin;
 
-pub mod asset_browser;
-pub mod widgets;
+pub mod assets;
+pub mod ui;
 
 pub struct EditorPlugins;
 impl PluginGroup for EditorPlugins {
