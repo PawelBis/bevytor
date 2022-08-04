@@ -9,10 +9,14 @@ use crate::editor::EditorStateLabel;
 
 const IMAGE_EXTENSIONS: &[&str] = &["png", "hdr"];
 
+/// AssetLoaderPlugin iterates over bevys "asset" folder creating directory hierarchy
+/// and loading all supported assets
 pub struct AssetLoaderPlugin;
 
 impl Plugin for AssetLoaderPlugin {
     fn build(&self, app: &mut App) {
+        // It is really important to prepare AssetDirectory resource here and not in startup system,
+        // as resources inserted through Commands are first available in the next frame
         const ASSET_DIRECTORY_NAME: &str = "assets";
         // TODO: Game asset directory should be editable per editor project
         const GAME_DIRECTORY_NAME: &str = "game";
@@ -21,6 +25,7 @@ impl Plugin for AssetLoaderPlugin {
             .join(GAME_DIRECTORY_NAME)
             .join(ASSET_DIRECTORY_NAME);
         let root = AssetDirectory::new(asset_dir.clone());
+
         app
             .insert_resource(root)
             .add_startup_system(load_editor_assets_system
@@ -32,6 +37,8 @@ impl Plugin for AssetLoaderPlugin {
     }
 }
 
+/// Bevytor image descriptor, contains handlers required for rendering it both in egui and bevy.
+/// egui is only using WEAK handler of the texture and only bevy is storing the image
 #[derive(Debug, Clone)]
 pub struct ImageAssetDescriptor {
     /// Name of the asset, with extension
@@ -44,13 +51,15 @@ pub struct ImageAssetDescriptor {
     pub egui_texture_id: TextureId,
 }
 
+/// All asset types currently supported in Bevytor. This enum will grow over time and at some
+/// point it will be moved to separate module
 #[derive(Debug, Clone)]
 pub enum AssetType {
     Image(ImageAssetDescriptor),
 }
 
 impl AssetType {
-    /// Tries to create asset from given path.
+    /// Try create an asset from given path. Naive implementation
     /// TODO: Make extension detection more sophisticated
     fn try_create(
         path: &Path,
@@ -82,7 +91,7 @@ impl AssetType {
     }
 }
 
-/// Stores data about a directory and assets contained within it
+/// Aggregates data about the asset directory and hierarchy in tree like container
 /// TODO: Change to generic treelike type
 #[derive(Debug, Clone)]
 pub struct AssetDirectory {
@@ -170,7 +179,7 @@ impl AssetDirectory {
         Err(potential_child)
     }
 
-    /// Find currently selected directory
+    /// Find directory that satisfies given predicate
     pub fn find_by_predicate (
         &self,
         pred: impl Fn(&AssetDirectory) -> bool
@@ -190,12 +199,14 @@ impl AssetDirectory {
         None
     }
 
+    /// Find directory by path. Convenience fn using `find_by_predicate` underneath
     pub fn find_by_path(&self, path: &PathBuf) -> Option<&AssetDirectory> {
         self.find_by_predicate(
             |dir| dir.path == *path
         )
     }
 
+    /// Find directory that satisfies given predicate
     pub fn find_by_predicate_mut(
         &mut self,
         pred: impl Fn(&mut AssetDirectory) -> bool
@@ -222,10 +233,14 @@ impl AssetDirectory {
     }
 }
 
+/// Special assets used by the editor. Right now editor assets are stored in bevytor crate root dir.
+/// TODO: Provide config for specifying game assets directory and editor assets directory
 pub struct EditorAssets {
     pub directory_icon: TextureId,
 }
 
+/// Load assets commonly used around the editor
+/// TODO: Consider moving this system to build fn
 pub fn load_editor_assets_system(
     mut commands: Commands,
     mut egui_context: ResMut<EguiContext>,
@@ -250,7 +265,8 @@ pub fn load_editor_assets_system(
     commands.insert_resource(editor_assets);
 }
 
-
+/// Load assets stored in the game assets directory
+/// TODO: Consider moving this system to build fn
 pub fn load_assets_system(
     asset_server: Res<AssetServer>,
     mut egui_ctx: ResMut<EguiContext>,

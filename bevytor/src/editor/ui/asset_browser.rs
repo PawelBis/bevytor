@@ -12,15 +12,16 @@ use crate::editor::assets::asset_loader::{
 use crate::editor::ui::widgets;
 use std::path::PathBuf;
 use bevy::prelude::{Commands, EventReader, EventWriter, ParallelSystemDescriptorCoercion, };
-use crate::editor::commands::{Command, CommandAny, CommandExecutedEvent, CommandExecuteMode, UndoRedoCommandEvent};
+use crate::editor::commands::{Command, CommandAny, CommandExecutedEvent, CommandExecuteDirection, UndoRedoCommandEvent};
 use crate::editor::EditorStateLabel;
 
+/// Command used for notification about SelectDirectory events.
+/// Designed with support for Undo and Redo in mind
 #[derive(Debug)]
 pub struct SelectDirectoryCommand {
     pub previous_selected_directory: AssetDirectory,
     pub new_selected_directory: AssetDirectory,
 }
-
 impl Command for SelectDirectoryCommand {
     fn recreate(&self) -> Box<dyn CommandAny> {
        Box::new(Self {
@@ -34,6 +35,8 @@ impl Command for SelectDirectoryCommand {
     }
 }
 
+/// Plugin for displaying and manipulating assets in file system like manner.
+/// UnrealEngine content browser is main inspiration
 pub struct AssetBrowserPlugin;
 impl Plugin for AssetBrowserPlugin {
     fn build(&self, app: &mut App) {
@@ -51,6 +54,7 @@ impl Plugin for AssetBrowserPlugin {
     }
 }
 
+/// Resource containing shallow copy of currently selected directory
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct SelectedDirectory {
     details: AssetDirectory,
@@ -84,7 +88,10 @@ impl From<AssetDirectory> for SelectedDirectory {
     }
 }
 
+/// Resource containing data about AssetBrowser settings
 struct AssetBrowserSettings {
+    /// Number of thumbnails per row.
+    /// AssetBrowser will scale all the thumbnails to satisfy this number
     thumbnails_per_row: u32,
 }
 
@@ -96,6 +103,7 @@ impl Default for AssetBrowserSettings {
     }
 }
 
+/// Setup system, right now only inserts SelectedDirectory resource. Should be moved to build function
 fn selection_setup(
     mut commands: Commands,
     root_directory: Res<AssetDirectory>,
@@ -104,7 +112,8 @@ fn selection_setup(
     commands.insert_resource(selected_directory);
 }
 
-// Remove recurrence!
+/// Draws tree structure of game assets directory and returns newly
+/// selected path if selection took place
 fn draw_directory_hierarchy(
     ui: &mut Ui,
     asset_directory: &AssetDirectory,
@@ -126,6 +135,7 @@ fn draw_directory_hierarchy(
                         new_selection = Some(child.path.clone());
                     }
                 } else {
+                    // We probably could get away with short circuiting on the selection
                     new_selection = draw_directory_hierarchy(ui, child);
                 }
             }
@@ -134,6 +144,9 @@ fn draw_directory_hierarchy(
     new_selection
 }
 
+/// As name suggests....
+/// Draws all the directories and assets contained within currently
+/// selected directory (Res<SelectedDirectory>)
 const DEFAULT_EGUI_MARGIN: Vec2 = Vec2::new(16.0, 16.0);
 fn draw_assets(
     ui: &mut Ui,
@@ -176,6 +189,9 @@ fn draw_assets(
     selected_directory_path
 }
 
+/// System drawing the asset browser. Contains mostly layout and commands.
+/// Uses helper functions (draw_assets, draw_directory_hierarchy) and draw for detailed drawings
+/// TODO: Please refactor this to something more readable
 fn asset_browser_system(
     mut egui_context: ResMut<EguiContext>,
     settings: ResMut<AssetBrowserSettings>,
@@ -238,6 +254,8 @@ fn asset_browser_system(
     ctx.set_style(current_style);
 }
 
+/// System for ResMut<SelectedDirectory> manipulation, with support for Undo and Redo events sent by
+/// commands system
 fn select_directory_system(
     mut normal_reader: EventReader<SelectDirectoryCommand>,
     mut undo_redo_reader: EventReader<UndoRedoCommandEvent>,
@@ -262,8 +280,8 @@ fn select_directory_system(
                 .downcast_ref()
                 .unwrap();
             let new_dir = match undo_redo_event.mode {
-                CommandExecuteMode::Redo => { &selected_directory_command.new_selected_directory }
-                CommandExecuteMode::Undo => { &selected_directory_command.previous_selected_directory }
+                CommandExecuteDirection::Redo => { &selected_directory_command.new_selected_directory }
+                CommandExecuteDirection::Undo => { &selected_directory_command.previous_selected_directory }
             };
             selected_directory.details = new_dir.clone();
         }
