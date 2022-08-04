@@ -1,9 +1,29 @@
+use std::any::Any;
+use std::fmt::{Display, Formatter};
 use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy_egui::egui::Event;
 
+pub trait CommandAny: Command + Any {
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+
+impl<T> CommandAny for T
+    where T: Command + Any
+{
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
 pub trait Command: Send + Sync + 'static {
-    fn recreate(&self) -> Box<dyn Command>;
+    fn recreate(&self) -> Box<dyn CommandAny>;
+    fn command_type(&self) -> &str;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -13,27 +33,35 @@ pub enum CommandExecuteMode {
 }
 
 pub struct CommandExecutedEvent {
-    pub inner: Box<dyn Command>,
-    pub mode: CommandExecuteMode,
+    pub inner: Box<dyn CommandAny>,
 }
-
 impl CommandExecutedEvent {
-    pub fn consume(&self) -> Box<dyn Command> {
+    pub fn consume(&self) -> Box<dyn CommandAny> {
         self.inner.recreate()
     }
+}
 
-    pub fn get_direction(&self) -> CommandExecuteMode {
-        self.mode
-    }
+pub struct UndoRedoCommandEvent {
+    pub inner: Box<dyn CommandAny>,
+    pub mode: CommandExecuteMode,
+}
+impl UndoRedoCommandEvent {
+    pub fn consume(&self) -> Box<dyn CommandAny> { self.inner.recreate() }
+    pub fn command_type(&self) -> &str { self.inner.command_type() }
 }
 
 pub struct CommandQueue {
-    pub items: Vec<Box<dyn Command>>,
+    pub items: Vec<Box<dyn CommandAny>>,
     pub pointer: Option<usize>,
+}
+impl Display for CommandQueue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "CommandQueue lenght: {}, pointer position: {:?}", self.items.len(), self.pointer)
+    }
 }
 
 impl CommandQueue {
-    pub fn insert(&mut self, command: Box<dyn Command>) {
+    pub fn insert(&mut self, command: Box<dyn CommandAny>) {
         if self.items.is_empty() {
             self.items.push(command);
             self.pointer = Some(self.items.len() - 1);
@@ -53,16 +81,17 @@ impl CommandQueue {
                 self.insert(command);
             }
         }
+        println!("{}", self);
     }
 
-    pub fn redo(&mut self, commands_writer: &mut EventWriter<CommandExecutedEvent>,) {
+    pub fn redo(&mut self, commands_writer: &mut EventWriter<UndoRedoCommandEvent>,) {
         let post_redo_index = match self.pointer {
             Some(ptr) => ptr + 1,
             None => 0
         };
         match self.items.get(post_redo_index) {
             Some(command) => {
-                commands_writer.send(CommandExecutedEvent {
+                commands_writer.send(UndoRedoCommandEvent {
                     inner: command.recreate(),
                     mode: CommandExecuteMode::Redo,
                 });
@@ -70,22 +99,29 @@ impl CommandQueue {
             }
             None => println!("Redo chain empty!"),
         };
+        println!("{}", self);
     }
 
-    pub fn undo(&mut self, commands_writer: &mut EventWriter<CommandExecutedEvent>, ) {
+    pub fn undo(&mut self, commands_writer: &mut EventWriter<UndoRedoCommandEvent>, ) {
         match self.pointer {
             Some(ptr) => {
                 if let Some(command) = self.items.get(ptr) {
-                    commands_writer.send(CommandExecutedEvent {
+                    commands_writer.send(UndoRedoCommandEvent {
                         inner: command.recreate(),
                         mode: CommandExecuteMode::Undo,
                     });
+                    self.pointer = if ptr > 0 {
+                        Some(ptr - 1)
+                    } else {
+                        None
+                    };
                 } else {
                     println!("No more items in undo chain!");
                 }
             }
             None => println!("No more items in undo chain!")
         }
+        println!("{}", self);
     }
 }
 
@@ -94,6 +130,7 @@ impl Plugin for EditorCommandsPlugin {
     fn build(&self, app: &mut App) {
         app
             .add_event::<CommandExecutedEvent>()
+            .add_event::<UndoRedoCommandEvent>()
             .insert_resource(CommandQueue {
                 items: Vec::new(),
                 pointer: None,
@@ -115,7 +152,7 @@ fn process_commands_system(
 
 fn undo_redo_system(
     keyboard: Res<Input<KeyCode>>,
-    mut commands_writer: EventWriter<CommandExecutedEvent>,
+    mut commands_writer: EventWriter<UndoRedoCommandEvent>,
     mut queue: ResMut<CommandQueue>,
 ) {
     if keyboard.pressed(KeyCode::LWin)

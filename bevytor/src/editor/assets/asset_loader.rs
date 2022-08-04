@@ -81,6 +81,12 @@ pub struct AssetDirectory {
     /// List of assets located in this directory
     pub assets: Vec<AssetType>,
 }
+impl PartialEq<Self> for AssetDirectory {
+    fn eq(&self, other: &Self) -> bool {
+        other.path == self.path
+    }
+}
+impl Eq for AssetDirectory {}
 
 impl AssetDirectory {
     fn new(path: PathBuf) -> Self {
