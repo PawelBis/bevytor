@@ -5,6 +5,7 @@ use std::env;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
+use crate::editor::EditorStateLabel;
 
 const IMAGE_EXTENSIONS: &[&str] = &["png", "hdr"];
 
@@ -12,9 +13,22 @@ pub struct AssetLoaderPlugin;
 
 impl Plugin for AssetLoaderPlugin {
     fn build(&self, app: &mut App) {
+        const ASSET_DIRECTORY_NAME: &str = "assets";
+        // TODO: Game asset directory should be editable per editor project
+        const GAME_DIRECTORY_NAME: &str = "game";
+        let asset_dir = env::current_dir()
+            .unwrap()
+            .join(GAME_DIRECTORY_NAME)
+            .join(ASSET_DIRECTORY_NAME);
+        let root = AssetDirectory::new(asset_dir.clone());
         app
-            .add_startup_system(load_editor_assets_system)
-            .add_startup_system(load_assets_system);
+            .insert_resource(root)
+            .add_startup_system(load_editor_assets_system
+                .label(EditorStateLabel::InitializingAssets)
+                .before(EditorStateLabel::PostInitializingAssets))
+            .add_startup_system(load_assets_system
+                .label(EditorStateLabel::InitializingAssets)
+                .before(EditorStateLabel::PostInitializingAssets));
     }
 }
 
@@ -198,13 +212,21 @@ impl AssetDirectory {
 
         None
     }
+
+    pub fn get_name(&self) -> String {
+        self.name.to_string_lossy().to_string()
+    }
+
+    pub fn get_path(&self) -> String {
+        self.path.to_string_lossy().to_string()
+    }
 }
 
 pub struct EditorAssets {
     pub directory_icon: TextureId,
 }
 
-fn load_editor_assets_system(
+pub fn load_editor_assets_system(
     mut commands: Commands,
     mut egui_context: ResMut<EguiContext>,
     asset_server: ResMut<AssetServer>,
@@ -230,26 +252,15 @@ fn load_editor_assets_system(
 
 
 pub fn load_assets_system(
-    mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut egui_ctx: ResMut<EguiContext>,
+    mut root: ResMut<AssetDirectory>,
 ) {
     println!("Loading assets");
-    const ASSET_DIRECTORY_NAME: &str = "assets";
-    // TODO: Game asset directory should be editable per editor project
-    const GAME_DIRECTORY_NAME: &str = "game";
-    let asset_dir = env::current_dir()
-        .unwrap()
-        .join(GAME_DIRECTORY_NAME)
-        .join(ASSET_DIRECTORY_NAME);
-
-    let mut root = AssetDirectory::new(asset_dir.clone());
-    for entry in WalkDir::new(asset_dir.clone())
+    for entry in WalkDir::new(root.path.clone())
         .into_iter()
         .filter_map(|e| e.ok())
     {
         root.try_insert(entry.path(), &asset_server, &mut egui_ctx);
     }
-
-    commands.insert_resource(root);
 }

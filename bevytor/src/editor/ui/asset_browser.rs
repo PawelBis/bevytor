@@ -6,17 +6,19 @@ use bevy_egui::{
 };
 use bevy_egui::egui::{ScrollArea, TextureId};
 use bevy_egui::egui::collapsing_header::CollapsingState;
-use crate::editor::assets::asset_loader::{AssetDirectory, AssetType, EditorAssets};
+use crate::editor::assets::asset_loader::{
+    AssetDirectory, AssetType, EditorAssets,
+};
 use crate::editor::ui::widgets;
 use std::path::PathBuf;
-use bevy::prelude::{EventReader, EventWriter};
-use bevy::prelude::KeyCode::Comma;
+use bevy::prelude::{Commands, EventReader, EventWriter, ParallelSystemDescriptorCoercion, };
 use crate::editor::commands::{Command, CommandAny, CommandExecutedEvent, CommandExecuteMode, UndoRedoCommandEvent};
+use crate::editor::EditorStateLabel;
 
 #[derive(Debug)]
 pub struct SelectDirectoryCommand {
-    pub previous_selected_directory: Option<AssetDirectory>,
-    pub new_selected_directory: Option<AssetDirectory>,
+    pub previous_selected_directory: AssetDirectory,
+    pub new_selected_directory: AssetDirectory,
 }
 
 impl Command for SelectDirectoryCommand {
@@ -38,20 +40,20 @@ impl Plugin for AssetBrowserPlugin {
         app
             .add_event::<SelectDirectoryCommand>()
             .insert_resource(AssetBrowserSettings::default())
-            .insert_resource(SelectedDirectory::default())
+            .add_startup_system(
+                selection_setup
+                    .after(EditorStateLabel::InitializingAssets)
+                    .label(EditorStateLabel::PostInitializingAssets)
+            )
+            .add_startup_system(selection_setup)
             .add_system(asset_browser_system)
             .add_system(select_directory_system);
     }
 }
 
-#[derive(Default, Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 struct SelectedDirectory {
-    details: Option<AssetDirectory>,
-}
-impl SelectedDirectory {
-    fn is_valid(&self) -> bool {
-        self.details.is_some()
-    }
+    details: AssetDirectory,
 }
 impl From<&AssetDirectory> for SelectedDirectory {
     fn from(other: &AssetDirectory) -> Self {
@@ -66,12 +68,12 @@ impl From<&AssetDirectory> for SelectedDirectory {
         }
 
         SelectedDirectory {
-            details: Some(AssetDirectory {
+            details: AssetDirectory {
                 name: other.name.clone(),
                 path: other.path.clone(),
                 children_directories,
                 assets: Vec::from(other.assets.as_slice()),
-            })
+            }
         }
     }
 }
@@ -94,35 +96,42 @@ impl Default for AssetBrowserSettings {
     }
 }
 
-// Remove recurency!
+fn selection_setup(
+    mut commands: Commands,
+    root_directory: Res<AssetDirectory>,
+) {
+    let selected_directory: SelectedDirectory = root_directory.as_ref().into();
+    commands.insert_resource(selected_directory);
+}
+
+// Remove recurrence!
 fn draw_directory_hierarchy(
     ui: &mut Ui,
     asset_directory: &AssetDirectory,
-    selected_directory: &mut SelectedDirectory,
-    mut selected_command_writer: &mut EventWriter<SelectDirectoryCommand>,
-) {
-    let directory_name = &asset_directory.name.to_string_lossy().to_string();
-    let id = ui.make_persistent_id(directory_name);
+) -> Option<PathBuf> {
+    let directory_name = asset_directory.get_name();
+    let id = ui.make_persistent_id(&directory_name);
+    let mut new_selection: Option<PathBuf> = None;
     CollapsingState::load_with_default_open(ui.ctx(), id, false)
         .show_header(ui, |ui| {
             let response = ui.button(directory_name);
             if response.clicked() {
-                let new_selected: SelectedDirectory = asset_directory.into();
-                selected_directory.details = new_selected.details;
+                new_selection = Some(asset_directory.path.clone());
             }
         })
         .body(|ui| {
             for child in asset_directory.children_directories.iter() {
                 if child.children_directories.is_empty() {
-                    if ui.button(child.name.to_string_lossy().to_string()).clicked() {
-                        let new_selected: SelectedDirectory = asset_directory.into();
-                        selected_directory.details = new_selected.details;
+                    if ui.button(child.get_name()).clicked() {
+                        new_selection = Some(child.path.clone());
                     }
                 } else {
-                    draw_directory_hierarchy(ui, child, selected_directory, selected_command_writer);
+                    new_selection = draw_directory_hierarchy(ui, child);
                 }
             }
         });
+
+    new_selection
 }
 
 const DEFAULT_EGUI_MARGIN: Vec2 = Vec2::new(16.0, 16.0);
@@ -171,17 +180,13 @@ fn asset_browser_system(
     mut egui_context: ResMut<EguiContext>,
     settings: ResMut<AssetBrowserSettings>,
     assets_directory: ResMut<AssetDirectory>,
-    selected_directory: Res<SelectedDirectory>,
+    currently_selected_directory: Res<SelectedDirectory>,
     editor_assets: Res<EditorAssets>,
     mut select_directory_event_writer: EventWriter<SelectDirectoryCommand>,
 ) {
     let ctx = egui_context.ctx_mut();
     let current_style = (*ctx.style()).clone();
     let mut new_style = current_style.clone();
-    let old_selected: SelectedDirectory = match &selected_directory.details {
-        Some(dir) => dir.into(),
-        None => assets_directory.as_ref().into(),
-    };
     new_style.visuals.button_frame = false;
     ctx.set_style(new_style);
     TopBottomPanel::bottom("ContentBrowserPanel")
@@ -193,13 +198,17 @@ fn asset_browser_system(
                     ui,
                     |ui| ScrollArea::vertical().auto_shrink([false, false]).show(
                         ui, |ui| {
-                            //println!("Old selection: {:?}", old_selected);
-                            let mut new_selection = SelectedDirectory::default();
-                            draw_directory_hierarchy(ui, &assets_directory, &mut new_selection, &mut select_directory_event_writer);
-                            if new_selection.is_valid() {
+                            let new_selected_path = draw_directory_hierarchy(
+                                ui,
+                                &assets_directory);
+
+                            if let Some(selected_path) = new_selected_path {
+                                let new_selected_directory = assets_directory
+                                    .find_by_path(&selected_path)
+                                    .expect("Selected path is valid!");
                                 let selected_command = SelectDirectoryCommand{
-                                    previous_selected_directory: old_selected.clone().details,
-                                    new_selected_directory: new_selection.details,
+                                    previous_selected_directory: currently_selected_directory.details.clone(),
+                                    new_selected_directory: new_selected_directory.clone(),
                                 };
                                 select_directory_event_writer.send(selected_command);
                             }
@@ -210,21 +219,16 @@ fn asset_browser_system(
             ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    let selected = match &selected_directory.details {
-                        Some(dir) => dir.clone(),
-                        None => assets_directory.clone(),
-                    };
                     if let Some (selected_path) = draw_assets(
                         ui,
                         settings.thumbnails_per_row,
-                        &selected,
+                        &currently_selected_directory.details,
                         editor_assets.directory_icon,
                     ) {
                         if let Some(selected_dir) = assets_directory.find_by_path(&selected_path) {
-                            println!("Sele {:?}", selected_dir);
                             let select_command = SelectDirectoryCommand {
-                                new_selected_directory: Some(selected_dir.clone()),
-                                previous_selected_directory: old_selected.clone().details,
+                                new_selected_directory: selected_dir.clone(),
+                                previous_selected_directory: currently_selected_directory.details.clone(),
                             };
                             select_directory_event_writer.send(select_command);
                         }
@@ -241,14 +245,9 @@ fn select_directory_system(
     mut command_executed_writer: EventWriter<CommandExecutedEvent>,
 ) {
     for event in normal_reader.iter() {
-        println!("New event {:?}", event);
-        let new_dir: SelectedDirectory = event
-            .new_selected_directory
-            .as_ref()
-            .unwrap()
-            .into();
-        if *selected_directory != new_dir {
-            selected_directory.details = new_dir.details;
+        let new_dir = &event.new_selected_directory;
+        if selected_directory.details != *new_dir {
+            selected_directory.details = new_dir.clone();
             command_executed_writer.send(CommandExecutedEvent {
                 inner: event.recreate(),
             });
@@ -266,8 +265,7 @@ fn select_directory_system(
                 CommandExecuteMode::Redo => { &selected_directory_command.new_selected_directory }
                 CommandExecuteMode::Undo => { &selected_directory_command.previous_selected_directory }
             };
-            let new_selected_dir: SelectedDirectory = new_dir.as_ref().unwrap().into();
-            selected_directory.details = new_selected_dir.details;
+            selected_directory.details = new_dir.clone();
         }
     }
 }
