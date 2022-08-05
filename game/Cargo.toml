@@ -8,4 +8,4 @@ edition = "2021"
 [dependencies]
 bevytor = { path = "../bevytor" }
 
-bevy = "0.7"
+bevy = "0.8"

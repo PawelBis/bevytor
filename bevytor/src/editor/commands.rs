@@ -1,6 +1,6 @@
+use bevy::prelude::*;
 use std::any::Any;
 use std::fmt::{Display, Formatter};
-use bevy::prelude::*;
 
 /// Auto trait enabling command downcasting
 pub trait CommandAny: Command + Any {
@@ -9,7 +9,8 @@ pub trait CommandAny: Command + Any {
 }
 
 impl<T> CommandAny for T
-    where T: Command + Any
+where
+    T: Command + Any,
 {
     fn as_any(&self) -> &dyn Any {
         self
@@ -49,8 +50,12 @@ pub struct UndoRedoCommandEvent {
     pub mode: CommandExecuteDirection,
 }
 impl UndoRedoCommandEvent {
-    pub fn consume(&self) -> Box<dyn CommandAny> { self.inner.recreate() }
-    pub fn command_type(&self) -> &str { self.inner.command_type() }
+    pub fn consume(&self) -> Box<dyn CommandAny> {
+        self.inner.recreate()
+    }
+    pub fn command_type(&self) -> &str {
+        self.inner.command_type()
+    }
 }
 
 /// Resource for Undo/Redo chain manipulation
@@ -62,7 +67,12 @@ pub struct CommandQueue {
 }
 impl Display for CommandQueue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "CommandQueue lenght: {}, pointer position: {:?}", self.items.len(), self.pointer)
+        write!(
+            f,
+            "CommandQueue lenght: {}, pointer position: {:?}",
+            self.items.len(),
+            self.pointer
+        )
     }
 }
 
@@ -83,7 +93,7 @@ impl CommandQueue {
                 }
                 self.items.push(command);
                 self.pointer = Some(self.items.len() - 1);
-            },
+            }
             None => {
                 self.items.clear();
                 self.insert(command);
@@ -93,10 +103,10 @@ impl CommandQueue {
     }
 
     /// Send UndoRedoCommandEvent with CommandExecuteDirection::Redo and increase the pointer
-    pub fn redo(&mut self, commands_writer: &mut EventWriter<UndoRedoCommandEvent>,) {
+    pub fn redo(&mut self, commands_writer: &mut EventWriter<UndoRedoCommandEvent>) {
         let post_redo_index = match self.pointer {
             Some(ptr) => ptr + 1,
-            None => 0
+            None => 0,
         };
         match self.items.get(post_redo_index) {
             Some(command) => {
@@ -112,7 +122,7 @@ impl CommandQueue {
     }
 
     /// Send UndoRedoCommandEvent with CommandExecuteDirection::Undo and decrease the pointer
-    pub fn undo(&mut self, commands_writer: &mut EventWriter<UndoRedoCommandEvent>, ) {
+    pub fn undo(&mut self, commands_writer: &mut EventWriter<UndoRedoCommandEvent>) {
         match self.pointer {
             Some(ptr) => {
                 if let Some(command) = self.items.get(ptr) {
@@ -120,16 +130,12 @@ impl CommandQueue {
                         inner: command.recreate(),
                         mode: CommandExecuteDirection::Undo,
                     });
-                    self.pointer = if ptr > 0 {
-                        Some(ptr - 1)
-                    } else {
-                        None
-                    };
+                    self.pointer = if ptr > 0 { Some(ptr - 1) } else { None };
                 } else {
                     println!("No more items in undo chain!");
                 }
             }
-            None => println!("No more items in undo chain!")
+            None => println!("No more items in undo chain!"),
         }
         println!("{}", self);
     }
@@ -138,8 +144,7 @@ impl CommandQueue {
 pub struct EditorCommandsPlugin;
 impl Plugin for EditorCommandsPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .add_event::<CommandExecutedEvent>()
+        app.add_event::<CommandExecutedEvent>()
             .add_event::<UndoRedoCommandEvent>()
             .insert_resource(CommandQueue {
                 items: Vec::new(),
@@ -167,14 +172,11 @@ fn undo_redo_system(
     mut commands_writer: EventWriter<UndoRedoCommandEvent>,
     mut queue: ResMut<CommandQueue>,
 ) {
-    if keyboard.pressed(KeyCode::LWin)
-        && keyboard.just_pressed(KeyCode::Z) {
+    if keyboard.pressed(KeyCode::LWin) && keyboard.just_pressed(KeyCode::Z) {
         queue.undo(&mut commands_writer);
     }
 
-    if keyboard.pressed(KeyCode::LWin)
-        && keyboard.just_pressed(KeyCode::Y) {
+    if keyboard.pressed(KeyCode::LWin) && keyboard.just_pressed(KeyCode::Y) {
         queue.redo(&mut commands_writer);
     }
 }
-

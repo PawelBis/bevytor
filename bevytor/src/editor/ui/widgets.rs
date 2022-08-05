@@ -1,8 +1,13 @@
+use crate::editor::assets::asset_loader::AssetDirectory;
+use bevy_egui::egui::collapsing_header::CollapsingState;
 use bevy_egui::egui::{
-    Color32, FontId, Vec2, Response, Ui, Widget, TextureId, Image,
-    Sense, Rounding, Rect, WidgetInfo, WidgetType,
+    Color32, FontId, Image, Rect, Response, Rounding, Sense, TextureId, Ui, Vec2, Widget,
+    WidgetInfo, WidgetType,
 };
 use std::default::Default;
+use std::path::PathBuf;
+use bevy::asset::Asset;
+use crate::editor::ui::asset_browser::Selection;
 
 #[derive(Default)]
 pub struct Thumbnail {
@@ -33,7 +38,8 @@ impl Widget for Thumbnail {
             Vec2::ZERO
         };
         let padded_size = image.size() + 2.0 * padding;
-        let (rect, mut response) = ui.allocate_exact_size(padded_size + Vec2::new(0.0, label_height), sense);
+        let (rect, mut response) =
+            ui.allocate_exact_size(padded_size + Vec2::new(0.0, label_height), sense);
         let image_rect = Rect::from_min_max(rect.min, rect.max - Vec2::new(0.0, label_height));
         response.widget_info(|| WidgetInfo::new(WidgetType::ImageButton));
 
@@ -83,7 +89,7 @@ impl Widget for Thumbnail {
                 // Display whole label as tooltip if width of the thumbnail doesn't allow for displaying it
                 response = response.on_hover_text(self.label.clone());
                 let new_len_raw = (self.label.chars().count() as f32 * label_part).trunc() as usize;
-                let new_len =  if new_len_raw > 2 {
+                let new_len = if new_len_raw > 2 {
                     new_len_raw - 2
                 } else {
                     new_len_raw
@@ -92,11 +98,9 @@ impl Widget for Thumbnail {
                 self.label.truncate(idx);
                 self.label.push_str("...")
             };
-            let label = ui.painter().layout_no_wrap(
-                self.label,
-                FontId::default(),
-                font_color,
-            );
+            let label = ui
+                .painter()
+                .layout_no_wrap(self.label, FontId::default(), font_color);
             let label_pos = rect.left_bottom() - Vec2::new(0.0, label_height);
             ui.painter().galley(label_pos, label);
         }
@@ -105,7 +109,7 @@ impl Widget for Thumbnail {
     }
 }
 
-pub fn thumbnail(ui: &mut Ui, label: String, size: Vec2, texture_id: TextureId, ) -> Response {
+pub fn thumbnail(ui: &mut Ui, label: String, size: Vec2, texture_id: TextureId) -> Response {
     let image_button = Thumbnail {
         label: label.clone(),
         size,
@@ -114,4 +118,65 @@ pub fn thumbnail(ui: &mut Ui, label: String, size: Vec2, texture_id: TextureId, 
         ..Default::default()
     };
     ui.add(image_button)
+}
+
+fn draw_directories(
+    ui: &mut Ui,
+    directory: &AssetDirectory,
+    draw_assets: bool,
+) -> Option<Selection> {
+    for child in directory.children_directories.iter() {
+        if child.children_directories.is_empty() {
+            if ui.button(child.get_name()).clicked() {
+                return Some(Selection::Directory(child.clone()));
+            }
+        } else {
+            if let Some(dir) = draw_directory_hierarchy(ui, child, draw_assets) {
+                return Some(dir);
+            }
+        }
+    }
+    None
+}
+
+fn draw_assets(ui: &mut Ui, directory: &AssetDirectory) -> Option<Selection> {
+    for asset in directory.assets.iter() {
+        if ui.button(asset.get_name()).clicked() {
+            return Some(Selection::Asset(asset.clone()));
+        }
+    }
+    None
+}
+
+/// Draws tree like structure of asset_directory
+/// selected path if selection took place
+pub fn draw_directory_hierarchy(
+    ui: &mut Ui,
+    asset_directory: &AssetDirectory,
+    should_draw_assets: bool,
+) -> Option<Selection> {
+    let directory_name = asset_directory.get_name();
+    let id = ui.make_persistent_id(&directory_name);
+    let mut new_selection: Option<Selection> = None;
+    CollapsingState::load_with_default_open(ui.ctx(), id, false)
+        .show_header(ui, |ui| {
+            let response = ui.button(directory_name);
+            if response.clicked() {
+                new_selection = Some(Selection::Directory(asset_directory.clone()));
+            }
+        })
+        .body(|ui| {
+            if let Some(selection) = draw_directories(ui, asset_directory, should_draw_assets) {
+                new_selection = Some(selection);
+            }
+
+            if !should_draw_assets {
+                return;
+            }
+            if let Some(selection) = draw_assets(ui, asset_directory) {
+                new_selection = Some(selection)
+            }
+        });
+
+    new_selection
 }

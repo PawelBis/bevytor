@@ -1,3 +1,4 @@
+use crate::editor::EditorStateLabel;
 use bevy::prelude::*;
 use bevy_egui::egui::TextureId;
 use bevy_egui::EguiContext;
@@ -5,7 +6,6 @@ use std::env;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
-use crate::editor::EditorStateLabel;
 
 const IMAGE_EXTENSIONS: &[&str] = &["png", "hdr"];
 
@@ -26,15 +26,23 @@ impl Plugin for AssetLoaderPlugin {
             .join(ASSET_DIRECTORY_NAME);
         let root = AssetDirectory::new(asset_dir.clone());
 
-        app
-            .insert_resource(root)
-            .add_startup_system(load_editor_assets_system
-                .label(EditorStateLabel::InitializingAssets)
-                .before(EditorStateLabel::PostInitializingAssets))
-            .add_startup_system(load_assets_system
-                .label(EditorStateLabel::InitializingAssets)
-                .before(EditorStateLabel::PostInitializingAssets));
+        app.insert_resource(root)
+            .add_startup_system(
+                load_editor_assets_system
+                    .label(EditorStateLabel::InitializingAssets)
+                    .before(EditorStateLabel::PostInitializingAssets),
+            )
+            .add_startup_system(
+                load_assets_system
+                    .label(EditorStateLabel::InitializingAssets)
+                    .before(EditorStateLabel::PostInitializingAssets),
+            );
     }
+}
+
+pub trait AssetDescriptor {
+    fn get_name(&self) -> String;
+    fn get_path(&self) -> PathBuf;
 }
 
 /// Bevytor image descriptor, contains handlers required for rendering it both in egui and bevy.
@@ -51,6 +59,16 @@ pub struct ImageAssetDescriptor {
     pub egui_texture_id: TextureId,
 }
 
+impl AssetDescriptor for ImageAssetDescriptor {
+    fn get_name(&self) -> String {
+        self.name.to_string_lossy().to_string()
+    }
+
+    fn get_path(&self) -> PathBuf {
+        self.path.clone()
+    }
+}
+
 /// All asset types currently supported in Bevytor. This enum will grow over time and at some
 /// point it will be moved to separate module
 #[derive(Debug, Clone)]
@@ -64,7 +82,7 @@ impl AssetType {
     fn try_create(
         path: &Path,
         asset_server: &AssetServer,
-        egui_context: &mut EguiContext
+        egui_context: &mut EguiContext,
     ) -> Option<Self> {
         let is_image = IMAGE_EXTENSIONS
             .into_iter()
@@ -84,9 +102,15 @@ impl AssetType {
         }))
     }
 
-    fn path(&self) -> PathBuf {
+    pub fn get_path(&self) -> PathBuf {
         match self {
-            AssetType::Image(i) => i.path.clone()
+            AssetType::Image(i) => i.get_path(),
+        }
+    }
+
+    pub fn get_name(&self) -> String {
+        match self {
+            AssetType::Image(i) => i.name.to_string_lossy().to_string(),
         }
     }
 }
@@ -127,10 +151,11 @@ impl AssetDirectory {
         &mut self,
         path: &Path,
         asset_server: &AssetServer,
-        mut egui_context: &mut EguiContext
+        mut egui_context: &mut EguiContext,
     ) -> bool {
         if path.metadata().unwrap().is_dir() {
-            self.try_insert_directory(AssetDirectory::new(path.to_path_buf())).is_ok()
+            self.try_insert_directory(AssetDirectory::new(path.to_path_buf()))
+                .is_ok()
         } else if let Some(asset) = AssetType::try_create(path, asset_server, &mut egui_context) {
             self.try_insert_asset(asset).is_ok()
         } else {
@@ -140,7 +165,10 @@ impl AssetDirectory {
 
     /// Checks if given directory is child of any directory in the hierarchy and
     /// stores it if it's true. Returns given directory back in case of error
-    fn try_insert_directory(&mut self, potential_child: AssetDirectory) -> Result<(), AssetDirectory> {
+    fn try_insert_directory(
+        &mut self,
+        potential_child: AssetDirectory,
+    ) -> Result<(), AssetDirectory> {
         if self.path == potential_child.path.parent().unwrap() {
             self.children_directories.push(potential_child);
             return Ok(());
@@ -161,7 +189,7 @@ impl AssetDirectory {
     /// Checks if an asset is child of any of the directories in the hierarchy
     /// TODO: Both try_insert_functions are basically the same and could be reduced to one fn
     fn try_insert_asset(&mut self, potential_child: AssetType) -> Result<(), AssetType> {
-        if self.path == potential_child.path().parent().unwrap() {
+        if self.path == potential_child.get_path().parent().unwrap() {
             self.assets.push(potential_child);
             return Ok(());
         }
@@ -180,9 +208,9 @@ impl AssetDirectory {
     }
 
     /// Find directory that satisfies given predicate
-    pub fn find_by_predicate (
+    pub fn find_by_predicate(
         &self,
-        pred: impl Fn(&AssetDirectory) -> bool
+        pred: impl Fn(&AssetDirectory) -> bool,
     ) -> Option<&AssetDirectory> {
         if pred(self) {
             return Some(&self);
@@ -191,7 +219,7 @@ impl AssetDirectory {
                 if pred(child) {
                     return Some(&child);
                 } else {
-                    return child.find_by_predicate(pred)
+                    return child.find_by_predicate(pred);
                 }
             }
         }
@@ -201,15 +229,13 @@ impl AssetDirectory {
 
     /// Find directory by path. Convenience fn using `find_by_predicate` underneath
     pub fn find_by_path(&self, path: &PathBuf) -> Option<&AssetDirectory> {
-        self.find_by_predicate(
-            |dir| dir.path == *path
-        )
+        self.find_by_predicate(|dir| dir.path == *path)
     }
 
     /// Find directory that satisfies given predicate
     pub fn find_by_predicate_mut(
         &mut self,
-        pred: impl Fn(&mut AssetDirectory) -> bool
+        pred: impl Fn(&mut AssetDirectory) -> bool,
     ) -> Option<&mut AssetDirectory> {
         if pred(self) {
             return Some(self);
@@ -253,14 +279,10 @@ pub fn load_editor_assets_system(
         .unwrap()
         .join(EDITOR_NAME)
         .join(EDITOR_ASSETS_DIRECTORY);
-    let bevy_handle: Handle<Image> = asset_server.load(
-        editor_assets_dir
-            .join("folder.png")
-            .as_path()
-    );
+    let bevy_handle: Handle<Image> =
+        asset_server.load(editor_assets_dir.join("folder.png").as_path());
     let editor_assets = EditorAssets {
-        directory_icon: egui_context
-            .add_image(bevy_handle),
+        directory_icon: egui_context.add_image(bevy_handle),
     };
     commands.insert_resource(editor_assets);
 }
