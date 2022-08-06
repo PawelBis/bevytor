@@ -117,7 +117,7 @@ impl AssetType {
 
 /// Aggregates data about the asset directory and hierarchy in tree like container
 /// TODO: Change to generic treelike type
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct AssetDirectory {
     /// Name of the directory
     pub name: OsString,
@@ -254,8 +254,8 @@ impl AssetDirectory {
         self.name.to_string_lossy().to_string()
     }
 
-    pub fn get_path(&self) -> String {
-        self.path.to_string_lossy().to_string()
+    pub fn get_path(&self) -> PathBuf {
+        self.path.clone()
     }
 }
 

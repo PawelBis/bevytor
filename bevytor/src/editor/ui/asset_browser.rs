@@ -7,7 +7,6 @@ use crate::editor::EditorStateLabel;
 use bevy::app::{App, Plugin};
 use bevy::ecs::system::{Res, ResMut};
 use bevy::prelude::{Commands, EventReader, EventWriter, ParallelSystemDescriptorCoercion};
-use bevy_egui::egui::collapsing_header::CollapsingState;
 use bevy_egui::egui::{ScrollArea, TextureId};
 use bevy_egui::{
     egui::{
@@ -20,24 +19,25 @@ use std::path::PathBuf;
 
 #[derive(Clone)]
 pub enum Selection {
-    Directory(AssetDirectory),
+    Directory(PathBuf),
     Asset(AssetType),
 }
 
+// TODO: Use this in asset_browser_system to propagate EnterDirectory and MainAssetCommand commands
 pub enum SelectionCommand {
-    Directory(SelectDirectoryCommand),
+    Directory(EnterDirectoryCommand),
     Asset,
 }
 
 /// Command used for notification about SelectDirectory events.
 /// Designed with support for Undo and Redo in mind
 #[derive(Debug)]
-pub struct SelectDirectoryCommand {
-    pub previous_selected_directory: AssetDirectory,
-    pub new_selected_directory: AssetDirectory,
+pub struct EnterDirectoryCommand {
+    pub previous_selected_directory: PathBuf,
+    pub new_selected_directory: PathBuf,
 }
 
-impl Command for SelectDirectoryCommand {
+impl Command for EnterDirectoryCommand {
     fn recreate(&self) -> Box<dyn CommandAny> {
         Box::new(Self {
             previous_selected_directory: self.previous_selected_directory.clone(),
@@ -55,7 +55,7 @@ impl Command for SelectDirectoryCommand {
 pub struct AssetBrowserPlugin;
 impl Plugin for AssetBrowserPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<SelectDirectoryCommand>()
+        app.add_event::<EnterDirectoryCommand>()
             .insert_resource(AssetBrowserSettings::default())
             .add_startup_system(
                 selection_setup
@@ -69,10 +69,18 @@ impl Plugin for AssetBrowserPlugin {
 }
 
 /// Resource containing shallow copy of currently selected directory
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 struct SelectedDirectory {
     details: AssetDirectory,
 }
+
+impl Clone for SelectedDirectory {
+    // Just abuse the fact that we can recreate itself from our inner AssetDirectory
+    fn clone(&self) -> Self {
+        Self::from(&self.details)
+    }
+}
+
 impl From<&AssetDirectory> for SelectedDirectory {
     fn from(other: &AssetDirectory) -> Self {
         let mut children_directories: Vec<AssetDirectory> = Vec::new();
@@ -99,6 +107,12 @@ impl From<&AssetDirectory> for SelectedDirectory {
 impl From<AssetDirectory> for SelectedDirectory {
     fn from(other: AssetDirectory) -> Self {
         Self::from(&other)
+    }
+}
+
+impl SelectedDirectory {
+    pub fn get_path(&self) -> PathBuf {
+        self.details.get_path()
     }
 }
 
@@ -182,10 +196,9 @@ fn draw_side_panel_tree_view(
     ui: &mut Ui,
     root_directory: &AssetDirectory,
     width: f32,
-    selected_directory: &AssetDirectory,
 ) -> Option<Selection> {
     let mut new_selection: Option<Selection> = None;
-    let mut draw_hierarchy = |ui: &mut Ui| {
+    let draw_hierarchy = |ui: &mut Ui| {
         let potential_selection = draw_directory_hierarchy(ui, &root_directory, false);
         if let Some(selection) = potential_selection {
             new_selection = Some(selection);
@@ -195,9 +208,7 @@ fn draw_side_panel_tree_view(
     let side_panel = SidePanel::left("ContentBrowserTreeView").default_width(width);
     let scroll_area = ScrollArea::vertical().auto_shrink([false, false]);
 
-    side_panel.show_inside(ui, |ui| {
-        scroll_area.show(ui, draw_hierarchy)
-    });
+    side_panel.show_inside(ui, |ui| scroll_area.show(ui, draw_hierarchy));
 
     new_selection
 }
@@ -210,7 +221,7 @@ fn asset_browser_system(
     root_directory: ResMut<AssetDirectory>,
     currently_selected_directory: Res<SelectedDirectory>,
     editor_assets: Res<EditorAssets>,
-    mut select_directory_event_writer: EventWriter<SelectDirectoryCommand>,
+    mut select_directory_event_writer: EventWriter<EnterDirectoryCommand>,
 ) {
     let ctx = egui_context.ctx_mut();
     let current_style = (*ctx.style()).clone();
@@ -222,18 +233,12 @@ fn asset_browser_system(
         .default_height(settings.default_height)
         .resizable(true);
     bottom_panel.show(ctx, |ui| {
-        let tree_selection = draw_side_panel_tree_view(
-            ui,
-            &root_directory,
-            settings.directory_hierarchy_widht,
-            &currently_selected_directory.details,
-        );
+        let tree_selection =
+            draw_side_panel_tree_view(ui, &root_directory, settings.directory_hierarchy_widht);
         if let Some(Selection::Directory(selected_dir)) = tree_selection {
-            let select_command = SelectDirectoryCommand {
+            let select_command = EnterDirectoryCommand {
                 new_selected_directory: selected_dir,
-                previous_selected_directory: currently_selected_directory
-                    .details
-                    .clone(),
+                previous_selected_directory: currently_selected_directory.details.get_path(),
             };
             select_directory_event_writer.send(select_command);
         }
@@ -246,15 +251,11 @@ fn asset_browser_system(
                 &currently_selected_directory.details,
                 editor_assets.directory_icon,
             ) {
-                if let Some(selected_dir) = root_directory.find_by_path(&selected_path) {
-                    let select_command = SelectDirectoryCommand {
-                        new_selected_directory: selected_dir.clone(),
-                        previous_selected_directory: currently_selected_directory
-                            .details
-                            .clone(),
-                    };
-                    select_directory_event_writer.send(select_command);
-                }
+                let select_command = EnterDirectoryCommand {
+                    new_selected_directory: selected_path,
+                    previous_selected_directory: currently_selected_directory.get_path(),
+                };
+                select_directory_event_writer.send(select_command);
             };
         })
     });
@@ -264,15 +265,20 @@ fn asset_browser_system(
 /// System for ResMut<SelectedDirectory> manipulation, with support for Undo and Redo events sent by
 /// commands system
 fn select_directory_system(
-    mut normal_reader: EventReader<SelectDirectoryCommand>,
+    mut normal_reader: EventReader<EnterDirectoryCommand>,
     mut undo_redo_reader: EventReader<UndoRedoCommandEvent>,
     mut selected_directory: ResMut<SelectedDirectory>,
     mut command_executed_writer: EventWriter<CommandExecutedEvent>,
+    root_directory: Res<AssetDirectory>,
 ) {
     for event in normal_reader.iter() {
-        let new_dir = &event.new_selected_directory;
-        if selected_directory.details != *new_dir {
-            selected_directory.details = new_dir.clone();
+        let new_selection_path = &event.new_selected_directory;
+        if selected_directory.get_path() != *new_selection_path {
+            *selected_directory = root_directory
+                .find_by_path(new_selection_path)
+                .expect("Selected Directory should contain valid path")
+                .into();
+
             command_executed_writer.send(CommandExecutedEvent {
                 inner: event.recreate(),
             });
@@ -281,7 +287,7 @@ fn select_directory_system(
 
     for undo_redo_event in undo_redo_reader.iter() {
         if undo_redo_event.command_type() == "select_directory_command" {
-            let selected_directory_command: &SelectDirectoryCommand =
+            let selected_directory_command: &EnterDirectoryCommand =
                 undo_redo_event.inner.as_any().downcast_ref().unwrap();
             let new_dir = match undo_redo_event.mode {
                 CommandExecuteDirection::Redo => &selected_directory_command.new_selected_directory,
@@ -289,7 +295,10 @@ fn select_directory_system(
                     &selected_directory_command.previous_selected_directory
                 }
             };
-            selected_directory.details = new_dir.clone();
+            *selected_directory = root_directory
+                .find_by_path(new_dir)
+                .expect("Undo/Redo should contain valid path")
+                .into();
         }
     }
 }

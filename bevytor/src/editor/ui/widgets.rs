@@ -1,13 +1,11 @@
 use crate::editor::assets::asset_loader::AssetDirectory;
+use crate::editor::ui::asset_browser::Selection;
 use bevy_egui::egui::collapsing_header::CollapsingState;
 use bevy_egui::egui::{
     Color32, FontId, Image, Rect, Response, Rounding, Sense, TextureId, Ui, Vec2, Widget,
     WidgetInfo, WidgetType,
 };
 use std::default::Default;
-use std::path::PathBuf;
-use bevy::asset::Asset;
-use crate::editor::ui::asset_browser::Selection;
 
 #[derive(Default)]
 pub struct Thumbnail {
@@ -128,7 +126,7 @@ fn draw_directories(
     for child in directory.children_directories.iter() {
         if child.children_directories.is_empty() {
             if ui.button(child.get_name()).clicked() {
-                return Some(Selection::Directory(child.clone()));
+                return Some(Selection::Directory(child.get_path()));
             }
         } else {
             if let Some(dir) = draw_directory_hierarchy(ui, child, draw_assets) {
@@ -162,7 +160,7 @@ pub fn draw_directory_hierarchy(
         .show_header(ui, |ui| {
             let response = ui.button(directory_name);
             if response.clicked() {
-                new_selection = Some(Selection::Directory(asset_directory.clone()));
+                new_selection = Some(Selection::Directory(asset_directory.get_path()));
             }
         })
         .body(|ui| {
