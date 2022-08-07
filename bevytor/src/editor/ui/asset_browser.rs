@@ -63,8 +63,8 @@ impl Plugin for AssetBrowserPlugin {
                     .label(EditorStateLabel::PostInitializingAssets),
             )
             .add_startup_system(selection_setup)
-            .add_system(asset_browser_system)
-            .add_system(select_directory_system);
+            .add_system(asset_browser_system.after(EditorStateLabel::InitializingAssets))
+            .add_system(select_directory_system.after(EditorStateLabel::InitializingAssets));
     }
 }
 
@@ -152,7 +152,7 @@ fn draw_assets(
     ui: &mut Ui,
     images_per_row: u32,
     asset_directory: &AssetDirectory,
-    directory_texture: TextureId,
+    editor_assets: &EditorAssets,
 ) -> Option<PathBuf> {
     let mut selected_directory_path: Option<PathBuf> = None;
     ui.with_layout(
@@ -167,7 +167,7 @@ fn draw_assets(
                     ui,
                     d.name.to_string_lossy().to_string(),
                     Vec2::splat(thumbnail_size) - DEFAULT_EGUI_MARGIN,
-                    directory_texture,
+                    editor_assets.directory_icon,
                 )
                 .double_clicked()
                 {
@@ -176,11 +176,14 @@ fn draw_assets(
             }
 
             for asset in asset_directory.assets.iter() {
-                let AssetType::Image(img) = asset;
+                let texture_id = match asset {
+                    AssetType::Image(image) => image.egui_texture_id,
+                    AssetType::Scene(scene) => editor_assets.map_icon,
+                };
                 let thumbnail = widgets::Thumbnail {
-                    label: img.name.to_string_lossy().to_string(),
+                    label: asset.get_name(),
                     size: Vec2::splat(thumbnail_size) - DEFAULT_EGUI_MARGIN,
-                    texture_id: img.egui_texture_id,
+                    texture_id,
                     selected: false,
                     ..Default::default()
                 };
@@ -249,7 +252,7 @@ fn asset_browser_system(
                 ui,
                 settings.thumbnails_per_row,
                 &currently_selected_directory.details,
-                editor_assets.directory_icon,
+                &editor_assets,
             ) {
                 let select_command = EnterDirectoryCommand {
                     new_selected_directory: selected_path,

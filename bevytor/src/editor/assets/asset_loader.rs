@@ -3,11 +3,9 @@ use bevy::prelude::*;
 use bevy_egui::egui::TextureId;
 use bevy_egui::EguiContext;
 use std::env;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
-
-const IMAGE_EXTENSIONS: &[&str] = &["png", "hdr"];
 
 /// AssetLoaderPlugin iterates over bevys "asset" folder creating directory hierarchy
 /// and loading all supported assets
@@ -63,6 +61,25 @@ impl AssetDescriptor for ImageAssetDescriptor {
     fn get_name(&self) -> String {
         self.name.to_string_lossy().to_string()
     }
+    fn get_path(&self) -> PathBuf {
+        self.path.clone()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SceneAssetDescriptor {
+    /// Name of the asset, with extension
+    pub name: OsString,
+    /// Path relative to assets directory
+    pub path: PathBuf,
+    /// Bevy asset handle
+    pub bevy_handle: Handle<Scene>,
+}
+
+impl AssetDescriptor for SceneAssetDescriptor {
+    fn get_name(&self) -> String {
+        self.name.to_string_lossy().to_string()
+    }
 
     fn get_path(&self) -> PathBuf {
         self.path.clone()
@@ -74,6 +91,7 @@ impl AssetDescriptor for ImageAssetDescriptor {
 #[derive(Debug, Clone)]
 pub enum AssetType {
     Image(ImageAssetDescriptor),
+    Scene(SceneAssetDescriptor),
 }
 
 impl AssetType {
@@ -84,33 +102,52 @@ impl AssetType {
         asset_server: &AssetServer,
         egui_context: &mut EguiContext,
     ) -> Option<Self> {
-        let is_image = IMAGE_EXTENSIONS
-            .into_iter()
-            .any(|ext| path.file_name().unwrap().to_string_lossy().ends_with(ext));
-        if !is_image {
-            return None;
+        match path
+            .extension()
+            .and_then(OsStr::to_str)
+        {
+            None => None,
+            Some(extension) => {
+                const IMAGE_EXTENSIONS: &[&str] = &["png", "hdr"];
+                const SCENE_EXTENSIONS: &[&str] = &["rot"];
+                let name = path.file_name().unwrap().to_os_string();
+                let path = path.to_path_buf();
+
+                if IMAGE_EXTENSIONS.contains(&extension) {
+                    let bevy_handle = asset_server.load(path.clone());
+                    let egui_texture_id = egui_context.add_image(bevy_handle.as_weak());
+
+                    Some(Self::Image(ImageAssetDescriptor {
+                        name,
+                        path,
+                        bevy_handle,
+                        egui_texture_id,
+                    }))
+                } else if SCENE_EXTENSIONS.contains(&extension) {
+                    let bevy_handle = asset_server.load(path.clone());
+                    Some(Self::Scene(SceneAssetDescriptor {
+                        name,
+                        path,
+                        bevy_handle,
+                    }))
+                } else {
+                    None
+                }
+            }
         }
-
-        let bevy_handle = asset_server.load(path.clone());
-        let egui_texture_id = egui_context.add_image(bevy_handle.as_weak());
-
-        Some(Self::Image(ImageAssetDescriptor {
-            name: path.file_name().unwrap().to_os_string(),
-            path: path.to_path_buf(),
-            bevy_handle,
-            egui_texture_id,
-        }))
     }
 
     pub fn get_path(&self) -> PathBuf {
         match self {
-            AssetType::Image(i) => i.get_path(),
+            AssetType::Image(asset_descriptor) => asset_descriptor.get_path(),
+            AssetType::Scene(asset_descriptor) => asset_descriptor.get_path(),
         }
     }
 
     pub fn get_name(&self) -> String {
         match self {
-            AssetType::Image(i) => i.name.to_string_lossy().to_string(),
+            AssetType::Image(asset_descriptor) => asset_descriptor.get_name(),
+            AssetType::Scene(asset_descriptor) => asset_descriptor.get_name(),
         }
     }
 }
@@ -263,6 +300,7 @@ impl AssetDirectory {
 /// TODO: Provide config for specifying game assets directory and editor assets directory
 pub struct EditorAssets {
     pub directory_icon: TextureId,
+    pub map_icon: TextureId,
 }
 
 /// Load assets commonly used around the editor
@@ -279,10 +317,13 @@ pub fn load_editor_assets_system(
         .unwrap()
         .join(EDITOR_NAME)
         .join(EDITOR_ASSETS_DIRECTORY);
-    let bevy_handle: Handle<Image> =
+    let directory_icon_handle: Handle<Image> =
         asset_server.load(editor_assets_dir.join("folder.png").as_path());
+    let map_icon_handle: Handle<Image> =
+        asset_server.load(editor_assets_dir.join("map.png").as_path());
     let editor_assets = EditorAssets {
-        directory_icon: egui_context.add_image(bevy_handle),
+        directory_icon: egui_context.add_image(directory_icon_handle),
+        map_icon: egui_context.add_image(map_icon_handle),
     };
     commands.insert_resource(editor_assets);
 }

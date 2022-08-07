@@ -1,6 +1,7 @@
 // use crate::editor::EditorStateLabel;
 use bevy::app::{App, Plugin};
 // use bevy::prelude::ExclusiveSystemDescriptorCoercion;
+pub mod scene_picker;
 
 struct EditorScenePlugin;
 impl Plugin for EditorScenePlugin {
