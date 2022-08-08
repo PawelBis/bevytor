@@ -5,6 +5,7 @@ use bevy_egui::EguiContext;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
+use bevy::ecs::schedule::ShouldRun;
 use walkdir::WalkDir;
 
 /// AssetLoaderPlugin iterates over bevys "asset" folder creating directory hierarchy
@@ -25,15 +26,10 @@ impl Plugin for AssetLoaderPlugin {
         let root = AssetDirectory::new(asset_dir.clone());
 
         app.insert_resource(root)
-            .add_startup_system(
-                load_editor_assets_system
-                    .label(EditorStateLabel::InitializingAssets)
-                    .before(EditorStateLabel::PostInitializingAssets),
-            )
-            .add_startup_system(
-                load_assets_system
-                    .label(EditorStateLabel::InitializingAssets)
-                    .before(EditorStateLabel::PostInitializingAssets),
+            .add_startup_system_set(
+                SystemSet::new()
+                    .with_system(load_editor_assets_system)
+                    .with_system(load_assets_system)
             );
     }
 }
@@ -109,7 +105,7 @@ impl AssetType {
             None => None,
             Some(extension) => {
                 const IMAGE_EXTENSIONS: &[&str] = &["png", "hdr"];
-                const SCENE_EXTENSIONS: &[&str] = &["rot"];
+                const SCENE_EXTENSIONS: &[&str] = &["ron"];
                 let name = path.file_name().unwrap().to_os_string();
                 let path = path.to_path_buf();
 
@@ -247,16 +243,14 @@ impl AssetDirectory {
     /// Find directory that satisfies given predicate
     pub fn find_by_predicate(
         &self,
-        pred: impl Fn(&AssetDirectory) -> bool,
+        pred: &dyn Fn(&AssetDirectory) -> bool,
     ) -> Option<&AssetDirectory> {
         if pred(self) {
             return Some(&self);
         } else {
             for child in self.children_directories.iter() {
-                if pred(child) {
-                    return Some(&child);
-                } else {
-                    return child.find_by_predicate(pred);
+                if let Some(result) = child.find_by_predicate(pred) {
+                    return Some(result);
                 }
             }
         }
@@ -266,7 +260,7 @@ impl AssetDirectory {
 
     /// Find directory by path. Convenience fn using `find_by_predicate` underneath
     pub fn find_by_path(&self, path: &PathBuf) -> Option<&AssetDirectory> {
-        self.find_by_predicate(|dir| dir.path == *path)
+        self.find_by_predicate(&|dir: &AssetDirectory| dir.path == *path)
     }
 
     /// Find directory that satisfies given predicate
@@ -301,6 +295,7 @@ impl AssetDirectory {
 pub struct EditorAssets {
     pub directory_icon: TextureId,
     pub map_icon: TextureId,
+    pub map_icon_handle: Handle<Image>,
 }
 
 /// Load assets commonly used around the editor
@@ -323,7 +318,8 @@ pub fn load_editor_assets_system(
         asset_server.load(editor_assets_dir.join("map.png").as_path());
     let editor_assets = EditorAssets {
         directory_icon: egui_context.add_image(directory_icon_handle),
-        map_icon: egui_context.add_image(map_icon_handle),
+        map_icon: egui_context.add_image(map_icon_handle.clone().as_weak()),
+        map_icon_handle,
     };
     commands.insert_resource(editor_assets);
 }
@@ -334,6 +330,7 @@ pub fn load_assets_system(
     asset_server: Res<AssetServer>,
     mut egui_ctx: ResMut<EguiContext>,
     mut root: ResMut<AssetDirectory>,
+    mut editor_state: ResMut<EditorStateLabel>,
 ) {
     println!("Loading assets");
     for entry in WalkDir::new(root.path.clone())
@@ -342,4 +339,5 @@ pub fn load_assets_system(
     {
         root.try_insert(entry.path(), &asset_server, &mut egui_ctx);
     }
+    *editor_state = EditorStateLabel::PostInitializingAssets;
 }

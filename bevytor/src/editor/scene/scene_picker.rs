@@ -2,15 +2,24 @@ use std::path::PathBuf;
 use bevy::asset::Asset;
 use bevy::prelude::*;
 use bevy_egui::EguiContext;
-use crate::editor::assets::asset_loader::AssetDirectory;
-use crate::editor::EditorStateLabel;
+use crate::editor::assets::asset_loader::{AssetDirectory, EditorAssets};
+use crate::editor::{EditorStateLabel, run_if_post_initializing_assets};
 
 pub struct ScenePickerPlugin;
 impl Plugin for ScenePickerPlugin {
     fn build(&self, app: &mut App) {
         app
             .insert_resource(MainScene::default())
-            .add_system(scene_picker_system.after(EditorStateLabel::InitializingAssets));
+            .add_startup_system_set(
+                SystemSet::new()
+                    .with_run_criteria(run_if_post_initializing_assets)
+                    .with_system(create_scene_system)
+            )
+            .add_system_set(
+                SystemSet::new()
+                    .with_run_criteria(run_if_post_initializing_assets)
+                    .with_system(scene_picker_system)
+            );
     }
 }
 
@@ -25,4 +34,15 @@ fn scene_picker_system(
     egui_context: ResMut<EguiContext>,
 ) {
 
+}
+
+fn create_scene_system(
+    mut commands: Commands,
+    editor_assets: Res<EditorAssets>,
+) {
+    commands.spawn_bundle(Camera2dBundle::default());
+    commands.spawn_bundle(SpriteBundle {
+        texture: editor_assets.map_icon_handle.clone(),
+        ..default()
+    });
 }

@@ -3,10 +3,10 @@ use crate::editor::commands::{
     Command, CommandAny, CommandExecuteDirection, CommandExecutedEvent, UndoRedoCommandEvent,
 };
 use crate::editor::ui::widgets::{self, draw_directory_hierarchy};
-use crate::editor::EditorStateLabel;
+use crate::editor::{EditorStateLabel, run_if_post_initializing_assets};
 use bevy::app::{App, Plugin};
 use bevy::ecs::system::{Res, ResMut};
-use bevy::prelude::{Commands, EventReader, EventWriter, ParallelSystemDescriptorCoercion};
+use bevy::prelude::{Commands, EventReader, EventWriter, ParallelSystemDescriptorCoercion, SystemSet};
 use bevy_egui::egui::{ScrollArea, TextureId};
 use bevy_egui::{
     egui::{
@@ -57,14 +57,18 @@ impl Plugin for AssetBrowserPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<EnterDirectoryCommand>()
             .insert_resource(AssetBrowserSettings::default())
-            .add_startup_system(
-                selection_setup
-                    .after(EditorStateLabel::InitializingAssets)
-                    .label(EditorStateLabel::PostInitializingAssets),
+            .insert_resource(SelectedDirectory::default())
+            .add_startup_system_set(
+                SystemSet::new()
+                    .with_run_criteria(run_if_post_initializing_assets)
+                    .with_system(selection_setup)
             )
-            .add_startup_system(selection_setup)
-            .add_system(asset_browser_system.after(EditorStateLabel::InitializingAssets))
-            .add_system(select_directory_system.after(EditorStateLabel::InitializingAssets));
+            .add_system_set(
+                SystemSet::new()
+                    .with_run_criteria(run_if_post_initializing_assets)
+                    .with_system(asset_browser_system)
+                    .with_system(select_directory_system)
+            );
     }
 }
 
@@ -72,6 +76,19 @@ impl Plugin for AssetBrowserPlugin {
 #[derive(Debug, Eq, PartialEq)]
 struct SelectedDirectory {
     details: AssetDirectory,
+}
+
+impl Default for SelectedDirectory {
+    fn default() -> Self {
+        Self {
+            details: AssetDirectory {
+                name: "Dummy".into(),
+                path: PathBuf::default(),
+                children_directories: Vec::new(),
+                assets: Vec::new()
+            }
+        }
+    }
 }
 
 impl Clone for SelectedDirectory {
@@ -139,9 +156,18 @@ impl Default for AssetBrowserSettings {
 }
 
 /// Setup system, right now only inserts SelectedDirectory resource. Should be moved to build function
-fn selection_setup(mut commands: Commands, root_directory: Res<AssetDirectory>) {
-    let selected_directory: SelectedDirectory = root_directory.as_ref().into();
-    commands.insert_resource(selected_directory);
+fn selection_setup(
+    mut commands: Commands,
+    root_directory: Res<AssetDirectory>,
+    mut currently_selected_directory: ResMut<SelectedDirectory>,
+    mut select_directory_event_writer: EventWriter<EnterDirectoryCommand>,
+) {
+    *currently_selected_directory = SelectedDirectory::from(root_directory.as_ref());
+    let select_command = EnterDirectoryCommand {
+        new_selected_directory: root_directory.get_path(),
+        previous_selected_directory: currently_selected_directory.get_path(),
+    };
+    select_directory_event_writer.send(select_command);
 }
 
 /// As name suggests....
@@ -277,6 +303,7 @@ fn select_directory_system(
     for event in normal_reader.iter() {
         let new_selection_path = &event.new_selected_directory;
         if selected_directory.get_path() != *new_selection_path {
+            println!("path: {:?}", new_selection_path);
             *selected_directory = root_directory
                 .find_by_path(new_selection_path)
                 .expect("Selected Directory should contain valid path")
