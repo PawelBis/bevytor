@@ -157,7 +157,7 @@ impl Plugin for EditorCommandsPlugin {
 
 /// Naive reading of CommandExecutedEvents and moving them to the CommandQueue.
 /// Consider sorting the events by the timestamp
-fn process_commands_system(
+pub fn process_commands_system(
     mut queue: ResMut<CommandQueue>,
     mut commands: EventReader<CommandExecutedEvent>,
 ) {
@@ -167,7 +167,7 @@ fn process_commands_system(
 }
 
 /// System reading keyboard input and producing Undo and Redo commands
-fn undo_redo_system(
+pub fn undo_redo_system(
     keyboard: Res<Input<KeyCode>>,
     mut commands_writer: EventWriter<UndoRedoCommandEvent>,
     mut queue: ResMut<CommandQueue>,

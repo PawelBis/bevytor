@@ -74,7 +74,7 @@ impl Plugin for AssetBrowserPlugin {
 
 /// Resource containing shallow copy of currently selected directory
 #[derive(Debug, Eq, PartialEq)]
-struct SelectedDirectory {
+pub struct SelectedDirectory {
     details: AssetDirectory,
 }
 
@@ -134,7 +134,7 @@ impl SelectedDirectory {
 }
 
 /// Resource containing data about AssetBrowser settings
-struct AssetBrowserSettings {
+pub struct AssetBrowserSettings {
     /// Default height of the asset browser
     /// TODO: Change to use screen %
     default_height: f32,
@@ -156,7 +156,7 @@ impl Default for AssetBrowserSettings {
 }
 
 /// Setup system, right now only inserts SelectedDirectory resource. Should be moved to build function
-fn selection_setup(
+pub fn selection_setup(
     mut commands: Commands,
     root_directory: Res<AssetDirectory>,
     mut currently_selected_directory: ResMut<SelectedDirectory>,
@@ -244,7 +244,7 @@ fn draw_side_panel_tree_view(
 
 /// System drawing the asset browser. Contains mostly layout and commands.
 /// Uses helper functions (draw_assets, draw_directory_hierarchy) and draw for detailed drawings
-fn asset_browser_system(
+pub fn asset_browser_system(
     mut egui_context: ResMut<EguiContext>,
     settings: ResMut<AssetBrowserSettings>,
     root_directory: ResMut<AssetDirectory>,
@@ -293,7 +293,7 @@ fn asset_browser_system(
 
 /// System for ResMut<SelectedDirectory> manipulation, with support for Undo and Redo events sent by
 /// commands system
-fn select_directory_system(
+pub fn select_directory_system(
     mut normal_reader: EventReader<EnterDirectoryCommand>,
     mut undo_redo_reader: EventReader<UndoRedoCommandEvent>,
     mut selected_directory: ResMut<SelectedDirectory>,

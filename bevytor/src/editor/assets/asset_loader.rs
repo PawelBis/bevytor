@@ -169,7 +169,7 @@ impl PartialEq<Self> for AssetDirectory {
 impl Eq for AssetDirectory {}
 
 impl AssetDirectory {
-    fn new(path: PathBuf) -> Self {
+    pub fn new(path: PathBuf) -> Self {
         Self {
             name: path.file_name().unwrap().to_os_string(),
             path,
