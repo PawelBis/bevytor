@@ -40,7 +40,6 @@ pub fn create_scene_system(
     mut commands: Commands,
     editor_assets: Res<EditorAssets>,
 ) {
-    println!("ASDF");
     commands.spawn_bundle(Camera2dBundle::default());
     commands.spawn_bundle(SpriteBundle {
         texture: editor_assets.map_icon_handle.clone(),

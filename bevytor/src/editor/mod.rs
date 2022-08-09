@@ -78,7 +78,9 @@ impl Plugin for EditorPlugin {
             .join(ASSET_DIRECTORY_NAME);
         let root = AssetDirectory::new(asset_dir.clone());
 
-        app.insert_resource(root)
+        app
+            .insert_resource(root)
+            .insert_resource(EditorAssets::default())
             .add_startup_system_set(
                 SystemSet::new()
                     .with_system(load_editor_assets_system)
@@ -118,16 +120,17 @@ impl Plugin for EditorPlugin {
         // Setup ScenePickerPlugin
         app
             .insert_resource(MainScene::default())
-            .add_startup_system_set(
-                SystemSet::new()
-                    //.with_run_criteria(run_if_post_initializing_assets_dbg)
-                    .with_system(create_scene_system)
-                    .after(EditorStateLabel::InitializingAssets)
-            )
+            //.add_startup_system_set(
+            //    SystemSet::new()
+            //        //.with_run_criteria(run_if_post_initializing_assets_dbg)
+            //        .with_system(create_scene_system)
+            //        .after(EditorStateLabel::InitializingAssets)
+            //)
             .add_system_set(
                 SystemSet::new()
                     //.with_run_criteria(run_if_post_initializing_assets)
                     .with_system(scene_picker_system)
+                    .with_system(create_scene_system)
                     .after(EditorStateLabel::InitializingAssets)
             );
     }

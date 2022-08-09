@@ -292,6 +292,7 @@ impl AssetDirectory {
 
 /// Special assets used by the editor. Right now editor assets are stored in bevytor crate root dir.
 /// TODO: Provide config for specifying game assets directory and editor assets directory
+#[derive(Default)]
 pub struct EditorAssets {
     pub directory_icon: TextureId,
     pub map_icon: TextureId,
