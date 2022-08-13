@@ -3,11 +3,12 @@ use crate::editor::commands::{
     Command, CommandAny, CommandExecuteDirection, CommandExecutedEvent, UndoRedoCommandEvent,
 };
 use crate::editor::ui::widgets::{self, draw_directory_hierarchy};
-use crate::editor::{EditorStateLabel, run_if_post_initializing_assets};
+use crate::editor::run_if_post_initializing_assets;
 use bevy::app::{App, Plugin};
 use bevy::ecs::system::{Res, ResMut};
-use bevy::prelude::{Commands, EventReader, EventWriter, ParallelSystemDescriptorCoercion, SystemSet};
-use bevy_egui::egui::{ScrollArea, TextureId};
+use bevy::prelude::{Commands, EventReader, EventWriter, SystemSet};
+use std::any::TypeId;
+use bevy_egui::egui::ScrollArea;
 use bevy_egui::{
     egui::{
         panel::{SidePanel, TopBottomPanel},
@@ -45,8 +46,8 @@ impl Command for EnterDirectoryCommand {
         })
     }
 
-    fn command_type(&self) -> &str {
-        "select_directory_command"
+    fn command_type(&self) -> TypeId {
+        TypeId::of::<EnterDirectoryCommand>()
     }
 }
 
@@ -157,7 +158,7 @@ impl Default for AssetBrowserSettings {
 
 /// Setup system, right now only inserts SelectedDirectory resource. Should be moved to build function
 pub fn selection_setup(
-    mut commands: Commands,
+    mut _commands: Commands,
     root_directory: Res<AssetDirectory>,
     mut currently_selected_directory: ResMut<SelectedDirectory>,
     mut select_directory_event_writer: EventWriter<EnterDirectoryCommand>,
@@ -204,7 +205,7 @@ fn draw_assets(
             for asset in asset_directory.assets.iter() {
                 let texture_id = match asset {
                     AssetType::Image(image) => image.egui_texture_id,
-                    AssetType::Scene(scene) => editor_assets.map_icon,
+                    AssetType::Scene(_) => editor_assets.map_icon,
                 };
                 let thumbnail = widgets::Thumbnail {
                     label: asset.get_name(),
@@ -316,7 +317,7 @@ pub fn select_directory_system(
     }
 
     for undo_redo_event in undo_redo_reader.iter() {
-        if undo_redo_event.command_type() == "select_directory_command" {
+        if undo_redo_event.cmd_type() == TypeId::of::<EnterDirectoryCommand>() {
             let selected_directory_command: &EnterDirectoryCommand =
                 undo_redo_event.inner.as_any().downcast_ref().unwrap();
             let new_dir = match undo_redo_event.mode {

@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use std::any::Any;
+use std::any::{Any, TypeId};
 use std::fmt::{Display, Formatter};
 
 /// Auto trait enabling command downcasting
@@ -24,7 +24,7 @@ where
 /// Command trait used by undo/redo chain
 pub trait Command: Send + Sync + 'static {
     fn recreate(&self) -> Box<dyn CommandAny>;
-    fn command_type(&self) -> &str;
+    fn command_type(&self) -> TypeId;
 }
 
 /// Used by undo/redo chain to specify how the command should be repeated
@@ -53,7 +53,8 @@ impl UndoRedoCommandEvent {
     pub fn consume(&self) -> Box<dyn CommandAny> {
         self.inner.recreate()
     }
-    pub fn command_type(&self) -> &str {
+
+    pub fn cmd_type(&self) -> TypeId {
         self.inner.command_type()
     }
 }

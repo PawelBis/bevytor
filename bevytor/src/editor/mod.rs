@@ -2,12 +2,11 @@ use assets::asset_loader::AssetLoaderPlugin;
 use bevy::app::{Plugin, PluginGroup, PluginGroupBuilder};
 use bevy::ecs::schedule::ShouldRun;
 use bevy::prelude::*;
-use bevy::scene::Scene;
 use bevy_egui::EguiPlugin;
 use crate::editor::commands::*;
 use crate::editor::assets::asset_loader::*;
 use crate::editor::ui::asset_browser::*;
-use crate::editor::scene::scene_picker::*;
+use crate::editor::scene::{EditorScenePlugin, SelectedScene};
 use ui::asset_browser::AssetBrowserPlugin;
 use std::env;
 
@@ -17,19 +16,8 @@ pub mod scene;
 pub mod ui;
 
 fn run_if_post_initializing_assets(
-    mut editor_state: ResMut<EditorStateLabel>
+    editor_state: Res<EditorStateLabel>
 ) -> ShouldRun {
-    if *editor_state == EditorStateLabel::PostInitializingAssets {
-        ShouldRun::Yes
-    } else {
-        ShouldRun::No
-    }
-}
-
-fn run_if_post_initializing_assets_dbg(
-    mut editor_state: ResMut<EditorStateLabel>
-) -> ShouldRun {
-    println!("Checking the pi state");
     if *editor_state == EditorStateLabel::PostInitializingAssets {
         ShouldRun::Yes
     } else {
@@ -56,7 +44,7 @@ impl PluginGroup for EditorPlugins {
             .add(AssetLoaderPlugin)
             .add(EditorCommandsPlugin)
             .add(AssetBrowserPlugin)
-            .add(ScenePickerPlugin);
+            .add(EditorScenePlugin);
     }
 }
 
@@ -119,7 +107,7 @@ impl Plugin for EditorPlugin {
 
         // Setup ScenePickerPlugin
         app
-            .insert_resource(MainScene::default())
+            .insert_resource(SelectedScene::default())
             //.add_startup_system_set(
             //    SystemSet::new()
             //        //.with_run_criteria(run_if_post_initializing_assets_dbg)
@@ -129,8 +117,6 @@ impl Plugin for EditorPlugin {
             .add_system_set(
                 SystemSet::new()
                     //.with_run_criteria(run_if_post_initializing_assets)
-                    .with_system(scene_picker_system)
-                    .with_system(create_scene_system)
                     .after(EditorStateLabel::InitializingAssets)
             );
     }

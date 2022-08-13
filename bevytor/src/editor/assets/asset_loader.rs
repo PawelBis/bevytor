@@ -5,7 +5,6 @@ use bevy_egui::EguiContext;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
-use bevy::ecs::schedule::ShouldRun;
 use walkdir::WalkDir;
 
 /// AssetLoaderPlugin iterates over bevys "asset" folder creating directory hierarchy
