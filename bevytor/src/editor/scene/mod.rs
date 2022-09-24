@@ -1,21 +1,71 @@
-use std::any::TypeId;
+use std::{any::TypeId, fs::File, io::Write};
 
-use bevy::{app::{App, Plugin}, prelude::EventReader};
 use crate::editor::assets::asset_loader::SceneAssetDescriptor;
+use bevy::{prelude::*, reflect::TypeRegistry, tasks::IoTaskPool};
 
-use super::commands::{Command, CommandAny};
+use super::{
+    assets::asset_loader::AssetDescriptor,
+    commands::{Command, CommandAny, UndoRedoCommandEvent},
+};
 
 pub struct EditorScenePlugin;
 impl Plugin for EditorScenePlugin {
     fn build(&self, app: &mut App) {
-        app
-            .insert_resource(SelectedScene::default());
+        app.insert_resource(SelectedScene::default())
+            .add_system(select_scene_system)
+            .add_system(create_scene_system);
     }
 }
 
 #[derive(Default, Clone)]
 pub struct SelectedScene {
-    descriptior: Option<SceneAssetDescriptor>,
+    pub descriptor: Option<SceneAssetDescriptor>,
+}
+
+#[derive(Clone)]
+pub struct CreateSceneCommand {
+    pub scene: Option<SceneAssetDescriptor>,
+}
+
+impl Command for CreateSceneCommand {
+    fn recreate(&self) -> Box<dyn CommandAny> {
+        Box::new(self.clone())
+    }
+
+    fn command_type(&self) -> TypeId {
+        TypeId::of::<CreateSceneCommand>()
+    }
+}
+
+pub fn create_scene_system(
+    mut create_scene_command_reader: EventReader<CreateSceneCommand>,
+    mut _undo_redo_command_reader: EventReader<UndoRedoCommandEvent>,
+) {
+    for create_scene in create_scene_command_reader.iter() {
+        let new_scene_path = match &create_scene.scene {
+            Some(scene_descriptor) => scene_descriptor
+                .get_path()
+                .as_path()
+                .to_str()
+                .unwrap()
+                .to_string(),
+            None => continue,
+        };
+        let world = World::new();
+        let type_registry = TypeRegistry::default();
+        let scene = DynamicScene::from_world(&world, &type_registry);
+        let serialized_scene = scene.serialize_ron(&type_registry).unwrap();
+        IoTaskPool::get()
+            .spawn(async move {
+                match File::create(new_scene_path)
+                    .and_then(|mut file| file.write(serialized_scene.as_bytes()))
+                {
+                    Ok(_) => (),
+                    Err(e) => error!("Failed to save scene: {e}"),
+                }
+            })
+            .detach();
+    }
 }
 
 pub struct SelectSceneCommand {
@@ -36,9 +86,8 @@ impl Command for SelectSceneCommand {
     }
 }
 
-pub fn select_scene_system(
-    _selected_scene_reader: EventReader<SelectSceneCommand>,
-) {
-
+pub fn select_scene_system(mut select_scene_reader: EventReader<SelectSceneCommand>) {
+    for _command in select_scene_reader.iter() {
+        println!("Selected scene bitch");
+    }
 }
-

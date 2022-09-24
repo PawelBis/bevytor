@@ -67,8 +67,6 @@ pub struct SceneAssetDescriptor {
     pub name: OsString,
     /// Path relative to assets directory
     pub path: PathBuf,
-    /// Bevy asset handle
-    pub bevy_handle: Handle<Scene>,
 }
 
 impl AssetDescriptor for SceneAssetDescriptor {
@@ -119,11 +117,9 @@ impl AssetType {
                         egui_texture_id,
                     }))
                 } else if SCENE_EXTENSIONS.contains(&extension) {
-                    let bevy_handle = asset_server.load(path.clone());
                     Some(Self::Scene(SceneAssetDescriptor {
                         name,
                         path,
-                        bevy_handle,
                     }))
                 } else {
                     None
@@ -313,9 +309,9 @@ pub fn load_editor_assets_system(
         .join(EDITOR_NAME)
         .join(EDITOR_ASSETS_DIRECTORY);
     let directory_icon_handle: Handle<Image> =
-        asset_server.load(editor_assets_dir.join("folder.png").as_path());
+        asset_server.load(editor_assets_dir.join("directory.png").as_path());
     let map_icon_handle: Handle<Image> =
-        asset_server.load(editor_assets_dir.join("map.png").as_path());
+        asset_server.load(editor_assets_dir.join("scene.png").as_path());
     let editor_assets = EditorAssets {
         directory_icon: egui_context.add_image(directory_icon_handle),
         map_icon: egui_context.add_image(map_icon_handle.clone().as_weak()),

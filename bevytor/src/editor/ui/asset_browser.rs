@@ -1,6 +1,6 @@
 use crate::editor::assets::asset_loader::{AssetDirectory, AssetType, EditorAssets};
 use crate::editor::commands::{
-    Command, CommandAny, CommandExecuteDirection, CommandExecutedEvent, UndoRedoCommandEvent,
+    Command, CommandAny, CommandExecuteDirection, ExecuteCommandEvent, UndoRedoCommandEvent,
 };
 use crate::editor::ui::widgets::{self, draw_directory_hierarchy};
 use crate::editor::run_if_post_initializing_assets;
@@ -298,7 +298,7 @@ pub fn select_directory_system(
     mut normal_reader: EventReader<EnterDirectoryCommand>,
     mut undo_redo_reader: EventReader<UndoRedoCommandEvent>,
     mut selected_directory: ResMut<SelectedDirectory>,
-    mut command_executed_writer: EventWriter<CommandExecutedEvent>,
+    mut command_executed_writer: EventWriter<ExecuteCommandEvent>,
     root_directory: Res<AssetDirectory>,
 ) {
     for event in normal_reader.iter() {
@@ -310,7 +310,7 @@ pub fn select_directory_system(
                 .expect("Selected Directory should contain valid path")
                 .into();
 
-            command_executed_writer.send(CommandExecutedEvent {
+            command_executed_writer.send(ExecuteCommandEvent {
                 inner: event.recreate(),
             });
         }

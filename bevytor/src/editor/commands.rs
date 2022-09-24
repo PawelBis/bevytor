@@ -35,10 +35,10 @@ pub enum CommandExecuteDirection {
 }
 
 /// Systems relying on undo/redo should send all their executed commands through this Event
-pub struct CommandExecutedEvent {
+pub struct ExecuteCommandEvent {
     pub inner: Box<dyn CommandAny>,
 }
-impl CommandExecutedEvent {
+impl ExecuteCommandEvent {
     pub fn consume(&self) -> Box<dyn CommandAny> {
         self.inner.recreate()
     }
@@ -145,7 +145,7 @@ impl CommandQueue {
 pub struct EditorCommandsPlugin;
 impl Plugin for EditorCommandsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<CommandExecutedEvent>()
+        app.add_event::<ExecuteCommandEvent>()
             .add_event::<UndoRedoCommandEvent>()
             .insert_resource(CommandQueue {
                 items: Vec::new(),
@@ -160,7 +160,7 @@ impl Plugin for EditorCommandsPlugin {
 /// Consider sorting the events by the timestamp
 pub fn process_commands_system(
     mut queue: ResMut<CommandQueue>,
-    mut commands: EventReader<CommandExecutedEvent>,
+    mut commands: EventReader<ExecuteCommandEvent>,
 ) {
     for command in commands.iter() {
         queue.insert(command.consume());

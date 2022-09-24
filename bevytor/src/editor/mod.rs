@@ -6,7 +6,7 @@ use bevy_egui::EguiPlugin;
 use crate::editor::commands::*;
 use crate::editor::assets::asset_loader::*;
 use crate::editor::ui::asset_browser::*;
-use crate::editor::scene::{EditorScenePlugin, SelectedScene};
+use crate::editor::scene::{EditorScenePlugin, SelectedScene, create_scene_system, CreateSceneCommand};
 use ui::asset_browser::AssetBrowserPlugin;
 use std::env;
 
@@ -69,16 +69,11 @@ impl Plugin for EditorPlugin {
         app
             .insert_resource(root)
             .insert_resource(EditorAssets::default())
-            .add_startup_system_set(
-                SystemSet::new()
-                    .with_system(load_editor_assets_system)
-                    .label(EditorStateLabel::InitializingAssets)
-                    .with_system(load_assets_system)
-                    .label(EditorStateLabel::InitializingAssets)
-            );
+            .add_startup_system(load_editor_assets_system)
+            .add_startup_system(load_assets_system.after(load_editor_assets_system));
 
         // Setup EditorCommandsPlugin
-        app.add_event::<CommandExecutedEvent>()
+        app.add_event::<ExecuteCommandEvent>()
             .add_event::<UndoRedoCommandEvent>()
             .insert_resource(CommandQueue {
                 items: Vec::new(),
@@ -91,33 +86,18 @@ impl Plugin for EditorPlugin {
         app.add_event::<EnterDirectoryCommand>()
             .insert_resource(AssetBrowserSettings::default())
             .insert_resource(SelectedDirectory::default())
-            .add_startup_system_set(
-                SystemSet::new()
-                    .with_run_criteria(run_if_post_initializing_assets)
-                    .with_system(selection_setup)
-                    .after(EditorStateLabel::InitializingAssets)
-            )
-            .add_system_set(
-                SystemSet::new()
-                    //.with_run_criteria(run_if_post_initializing_assets)
-                    .with_system(asset_browser_system)
-                    .with_system(select_directory_system)
-                    .after(EditorStateLabel::InitializingAssets)
-            );
+            .add_startup_system(selection_setup.after(load_assets_system))
+            .add_system(asset_browser_system)
+            .add_system(select_directory_system);
 
         // Setup ScenePickerPlugin
         app
             .insert_resource(SelectedScene::default())
-            //.add_startup_system_set(
-            //    SystemSet::new()
-            //        //.with_run_criteria(run_if_post_initializing_assets_dbg)
-            //        .with_system(create_scene_system)
-            //        .after(EditorStateLabel::InitializingAssets)
-            //)
-            .add_system_set(
-                SystemSet::new()
-                    //.with_run_criteria(run_if_post_initializing_assets)
-                    .after(EditorStateLabel::InitializingAssets)
-            );
+            .add_event::<CreateSceneCommand>()
+            .add_system(create_scene_system);
+    }
+
+    fn name(&self) -> &str {
+        std::any::type_name::<Self>()
     }
 }
