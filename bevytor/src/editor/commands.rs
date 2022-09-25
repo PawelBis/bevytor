@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_egui::egui::{Widget, Ui};
 use std::any::{Any, TypeId};
 use std::fmt::{Display, Formatter};
 

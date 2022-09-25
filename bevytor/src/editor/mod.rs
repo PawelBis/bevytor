@@ -1,23 +1,24 @@
+use crate::editor::assets::asset_loader::*;
+use crate::editor::commands::*;
+use crate::editor::scene::{
+    create_scene_system, CreateSceneCommand, EditorScenePlugin, SelectedScene,
+};
+use crate::editor::ui::asset_browser::*;
 use assets::asset_loader::AssetLoaderPlugin;
 use bevy::app::{Plugin, PluginGroup, PluginGroupBuilder};
 use bevy::ecs::schedule::ShouldRun;
 use bevy::prelude::*;
-use bevy_egui::EguiPlugin;
-use crate::editor::commands::*;
-use crate::editor::assets::asset_loader::*;
-use crate::editor::ui::asset_browser::*;
-use crate::editor::scene::{EditorScenePlugin, SelectedScene, create_scene_system, CreateSceneCommand};
-use ui::asset_browser::AssetBrowserPlugin;
+use bevy_egui::egui::{menu, SelectableLabel, TopBottomPanel};
+use bevy_egui::{EguiContext, EguiPlugin};
 use std::env;
+use ui::asset_browser::AssetBrowserPlugin;
 
 pub mod assets;
 pub mod commands;
 pub mod scene;
 pub mod ui;
 
-fn run_if_post_initializing_assets(
-    editor_state: Res<EditorStateLabel>
-) -> ShouldRun {
+fn run_if_post_initializing_assets(editor_state: Res<EditorStateLabel>) -> ShouldRun {
     if *editor_state == EditorStateLabel::PostInitializingAssets {
         ShouldRun::Yes
     } else {
@@ -48,6 +49,20 @@ impl PluginGroup for EditorPlugins {
     }
 }
 
+pub struct ShowCreateSceneWidgetContext {
+    pub show_widget: bool,
+    pub scene_name: String,
+}
+
+impl Default for ShowCreateSceneWidgetContext {
+    fn default() -> Self {
+        Self {
+            show_widget: false,
+            scene_name: "new_scene.scn.ron".into()
+        }
+    }
+}
+
 /// Plugin segregation was faulty, lets bind everything in one plugin
 pub struct EditorPlugin;
 impl Plugin for EditorPlugin {
@@ -66,11 +81,12 @@ impl Plugin for EditorPlugin {
             .join(ASSET_DIRECTORY_NAME);
         let root = AssetDirectory::new(asset_dir.clone());
 
-        app
-            .insert_resource(root)
+        app.insert_resource(root)
             .insert_resource(EditorAssets::default())
+            .insert_resource(ShowCreateSceneWidgetContext::default())
             .add_startup_system(load_editor_assets_system)
-            .add_startup_system(load_assets_system.after(load_editor_assets_system));
+            .add_startup_system(load_assets_system.after(load_editor_assets_system))
+            .add_system(show_menu_bar);
 
         // Setup EditorCommandsPlugin
         app.add_event::<ExecuteCommandEvent>()
@@ -91,13 +107,36 @@ impl Plugin for EditorPlugin {
             .add_system(select_directory_system);
 
         // Setup ScenePickerPlugin
-        app
-            .insert_resource(SelectedScene::default())
+        app.insert_resource(SelectedScene::default())
             .add_event::<CreateSceneCommand>()
             .add_system(create_scene_system);
     }
 
     fn name(&self) -> &str {
         std::any::type_name::<Self>()
+    }
+}
+
+fn show_menu_bar(
+    mut egui_context: ResMut<EguiContext>,
+    mut show_create_scene_widget: ResMut<ShowCreateSceneWidgetContext>,
+    mut create_scene_command_writer: EventWriter<CreateSceneCommand>,
+) {
+    TopBottomPanel::top("MenuBar").show(&egui_context.ctx_mut(), |ui| {
+        menu::bar(ui, |ui| {
+            menu::menu_button(ui, "File", |ui| {
+                if !show_create_scene_widget.show_widget {
+                    ui.menu_button("New", |ui| {
+                        ui.toggle_value(&mut show_create_scene_widget.show_widget, "Scene");
+                    });
+                };
+            });
+        });
+    });
+
+    if show_create_scene_widget.show_widget {
+        if let Some(command) = CreateSceneCommand::widget(&mut egui_context, &mut show_create_scene_widget) {
+            create_scene_command_writer.send(command);
+        }
     }
 }
