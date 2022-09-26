@@ -317,19 +317,21 @@ pub fn select_directory_system(
     }
 
     for undo_redo_event in undo_redo_reader.iter() {
-        if undo_redo_event.cmd_type() == TypeId::of::<EnterDirectoryCommand>() {
-            let selected_directory_command: &EnterDirectoryCommand =
-                undo_redo_event.inner.as_any().downcast_ref().unwrap();
-            let new_dir = match undo_redo_event.mode {
-                CommandExecuteDirection::Redo => &selected_directory_command.new_selected_directory,
-                CommandExecuteDirection::Undo => {
-                    &selected_directory_command.previous_selected_directory
-                }
-            };
-            *selected_directory = root_directory
-                .find_by_path(new_dir)
-                .expect("Undo/Redo should contain valid path")
-                .into();
+        if undo_redo_event.cmd_type() != TypeId::of::<EnterDirectoryCommand>() {
+            continue;
         }
+
+        let selected_directory_command: &EnterDirectoryCommand =
+            undo_redo_event.inner.as_any().downcast_ref().unwrap();
+        let new_dir = match undo_redo_event.mode {
+            CommandExecuteDirection::Redo => &selected_directory_command.new_selected_directory,
+            CommandExecuteDirection::Undo => {
+                &selected_directory_command.previous_selected_directory
+            }
+        };
+        *selected_directory = root_directory
+            .find_by_path(new_dir)
+            .expect("Undo/Redo should contain valid path")
+            .into();
     }
 }

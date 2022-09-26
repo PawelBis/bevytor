@@ -9,7 +9,7 @@ use bevy_egui::{
 
 use super::{
     assets::asset_loader::AssetDescriptor,
-    commands::{Command, CommandAny, UndoRedoCommandEvent},
+    commands::{Command, CommandAny, UndoRedoCommandEvent, ExecuteCommandEvent, CommandExecuteDirection},
     ShowCreateSceneWidgetContext,
 };
 
@@ -17,7 +17,7 @@ pub struct EditorScenePlugin;
 impl Plugin for EditorScenePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(SelectedScene::default())
-            .add_system(select_scene_system)
+            .add_system(open_scene_system)
             .add_system(create_scene_system);
     }
 }
@@ -84,9 +84,27 @@ impl Command for CreateSceneCommand {
     }
 }
 
+// Returns true if scene was saved
+fn create_and_save_scene(
+    path: String,
+    parent: String,
+) -> bool {
+    let world = World::new();
+    let type_registry = TypeRegistry::default();
+    let scene = DynamicScene::from_world(&world, &type_registry);
+    let serialized_scene = scene.serialize_ron(&type_registry).unwrap();
+    if !std::path::Path::new(&path).exists() {
+        false
+    } else {
+        std::fs::create_dir_all(parent).unwrap();
+        File::create(path).and_then(|mut file| file.write(serialized_scene.as_bytes())).is_ok()
+    }
+}
+
 pub fn create_scene_system(
     mut create_scene_command_reader: EventReader<CreateSceneCommand>,
-    mut _undo_redo_command_reader: EventReader<UndoRedoCommandEvent>,
+    mut undo_redo_command_reader: EventReader<UndoRedoCommandEvent>,
+    mut execute_command_writer: EventWriter<ExecuteCommandEvent>,
 ) {
     for create_scene in create_scene_command_reader.iter() {
         let (new_scene_path, new_scene_parent) = match &create_scene.scene {
@@ -109,32 +127,48 @@ pub fn create_scene_system(
             }
             None => continue,
         };
-        let world = World::new();
-        let type_registry = TypeRegistry::default();
-        let scene = DynamicScene::from_world(&world, &type_registry);
-        let serialized_scene = scene.serialize_ron(&type_registry).unwrap();
-        IoTaskPool::get()
-            .spawn(async move {
-                std::fs::create_dir_all(new_scene_parent).unwrap();
-                if !std::path::Path::new(&new_scene_path).exists() {
-                    match File::create(new_scene_path)
-                        .and_then(|mut file| file.write(serialized_scene.as_bytes()))
-                    {
+        if create_and_save_scene(new_scene_path, new_scene_parent) {
+            execute_command_writer.send(
+                ExecuteCommandEvent { inner: create_scene.recreate() }
+            );
+        }
+    }
+
+    for undo_redo_event in undo_redo_command_reader.iter() {
+        if undo_redo_event.cmd_type() != TypeId::of::<CreateSceneCommand>() {
+            continue;
+        }
+
+        let create_scene_event: &CreateSceneCommand = undo_redo_event.inner.as_any().downcast_ref().unwrap();
+        match undo_redo_event.mode {
+            CommandExecuteDirection::Undo => {
+                if let Some(scene_descriptor) = &create_scene_event.scene {
+                    match std::fs::remove_file(scene_descriptor.get_path()) {
                         Ok(_) => (),
-                        Err(e) => error!("Failed to save scene: {e}"),
-                    }
+                        Err(e) => match e.kind() {
+                            std::io::ErrorKind::PermissionDenied => {
+                                error!("Failed to delete file: {:?}", scene_descriptor.get_path());
+                            },
+                            _ => (),
+                        },
+                    };
                 }
-            })
-            .detach();
+            },
+            CommandExecuteDirection::Redo => {
+                let recreate_scene: &CreateSceneCommand = undo_redo_event.inner.as_any().downcast_ref().unwrap();
+                let path = recreate_scene.scene.clone().unwrap().get_path();
+                create_and_save_scene(path.to_str().unwrap().to_string(), path.parent().unwrap().to_str().unwrap().to_string());
+            },
+        }
     }
 }
 
-pub struct SelectSceneCommand {
+pub struct OpenSceneCommand {
     next: Option<SceneAssetDescriptor>,
     previous: Option<SceneAssetDescriptor>,
 }
 
-impl Command for SelectSceneCommand {
+impl Command for OpenSceneCommand {
     fn recreate(&self) -> Box<dyn CommandAny> {
         Box::new(Self {
             next: self.next.clone(),
@@ -143,11 +177,11 @@ impl Command for SelectSceneCommand {
     }
 
     fn command_type(&self) -> TypeId {
-        TypeId::of::<SelectSceneCommand>()
+        TypeId::of::<OpenSceneCommand>()
     }
 }
 
-pub fn select_scene_system(mut select_scene_reader: EventReader<SelectSceneCommand>) {
+pub fn open_scene_system(mut select_scene_reader: EventReader<OpenSceneCommand>) {
     for _command in select_scene_reader.iter() {
         println!("Selected scene bitch");
     }
