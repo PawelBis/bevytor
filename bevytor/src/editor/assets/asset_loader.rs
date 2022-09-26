@@ -24,12 +24,11 @@ impl Plugin for AssetLoaderPlugin {
             .join(ASSET_DIRECTORY_NAME);
         let root = AssetDirectory::new(asset_dir.clone());
 
-        app.insert_resource(root)
-            .add_startup_system_set(
-                SystemSet::new()
-                    .with_system(load_editor_assets_system)
-                    .with_system(load_assets_system)
-            );
+        app.insert_resource(root).add_startup_system_set(
+            SystemSet::new()
+                .with_system(load_editor_assets_system)
+                .with_system(load_assets_system),
+        );
     }
 }
 
@@ -95,10 +94,7 @@ impl AssetType {
         asset_server: &AssetServer,
         egui_context: &mut EguiContext,
     ) -> Option<Self> {
-        match path
-            .extension()
-            .and_then(OsStr::to_str)
-        {
+        match path.extension().and_then(OsStr::to_str) {
             None => None,
             Some(extension) => {
                 const IMAGE_EXTENSIONS: &[&str] = &["png", "hdr"];
@@ -117,10 +113,7 @@ impl AssetType {
                         egui_texture_id,
                     }))
                 } else if SCENE_EXTENSIONS.contains(&extension) {
-                    Some(Self::Scene(SceneAssetDescriptor {
-                        name,
-                        path,
-                    }))
+                    Some(Self::Scene(SceneAssetDescriptor { name, path }))
                 } else {
                     None
                 }

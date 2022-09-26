@@ -58,7 +58,7 @@ impl Default for ShowCreateSceneWidgetContext {
     fn default() -> Self {
         Self {
             show_widget: false,
-            scene_name: "new_scene.scn.ron".into()
+            scene_name: "new_scene.scn.ron".into(),
         }
     }
 }
@@ -135,7 +135,9 @@ fn show_menu_bar(
     });
 
     if show_create_scene_widget.show_widget {
-        if let Some(command) = CreateSceneCommand::widget(&mut egui_context, &mut show_create_scene_widget) {
+        if let Some(command) =
+            CreateSceneCommand::widget(&mut egui_context, &mut show_create_scene_widget)
+        {
             create_scene_command_writer.send(command);
         }
     }

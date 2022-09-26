@@ -9,7 +9,8 @@ use bevy_egui::{
 
 use super::{
     assets::asset_loader::AssetDescriptor,
-    commands::{Command, CommandAny, UndoRedoCommandEvent}, ShowCreateSceneWidgetContext,
+    commands::{Command, CommandAny, UndoRedoCommandEvent},
+    ShowCreateSceneWidgetContext,
 };
 
 pub struct EditorScenePlugin;
@@ -32,7 +33,10 @@ pub struct CreateSceneCommand {
 }
 
 impl CreateSceneCommand {
-    pub fn widget(context: &mut EguiContext, widget_context: &mut ShowCreateSceneWidgetContext) -> Option<CreateSceneCommand> {
+    pub fn widget(
+        context: &mut EguiContext,
+        widget_context: &mut ShowCreateSceneWidgetContext,
+    ) -> Option<CreateSceneCommand> {
         let mut create_scene_command = None;
         let mut is_open = widget_context.show_widget;
         let window = Window::new("Create new scene")
@@ -50,7 +54,8 @@ impl CreateSceneCommand {
                         create_scene_command = Some(CreateSceneCommand {
                             scene: Some(SceneAssetDescriptor {
                                 name: widget_context.scene_name.as_str().into(),
-                                path: format!("game/assets/scenes/{}", widget_context.scene_name).into(),
+                                path: format!("game/assets/scenes/{}", widget_context.scene_name)
+                                    .into(),
                             }),
                         });
                         is_open = false;
@@ -101,7 +106,7 @@ pub fn create_scene_system(
                     .unwrap()
                     .to_string();
                 (path, parent)
-            },
+            }
             None => continue,
         };
         let world = World::new();

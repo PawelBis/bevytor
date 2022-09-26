@@ -2,12 +2,11 @@ use crate::editor::assets::asset_loader::{AssetDirectory, AssetType, EditorAsset
 use crate::editor::commands::{
     Command, CommandAny, CommandExecuteDirection, ExecuteCommandEvent, UndoRedoCommandEvent,
 };
-use crate::editor::ui::widgets::{self, draw_directory_hierarchy};
 use crate::editor::run_if_post_initializing_assets;
+use crate::editor::ui::widgets::{self, draw_directory_hierarchy};
 use bevy::app::{App, Plugin};
 use bevy::ecs::system::{Res, ResMut};
 use bevy::prelude::{Commands, EventReader, EventWriter, SystemSet};
-use std::any::TypeId;
 use bevy_egui::egui::ScrollArea;
 use bevy_egui::{
     egui::{
@@ -16,6 +15,7 @@ use bevy_egui::{
     },
     EguiContext,
 };
+use std::any::TypeId;
 use std::path::PathBuf;
 
 #[derive(Clone)]
@@ -62,13 +62,13 @@ impl Plugin for AssetBrowserPlugin {
             .add_startup_system_set(
                 SystemSet::new()
                     .with_run_criteria(run_if_post_initializing_assets)
-                    .with_system(selection_setup)
+                    .with_system(selection_setup),
             )
             .add_system_set(
                 SystemSet::new()
                     .with_run_criteria(run_if_post_initializing_assets)
                     .with_system(asset_browser_system)
-                    .with_system(select_directory_system)
+                    .with_system(select_directory_system),
             );
     }
 }
@@ -86,8 +86,8 @@ impl Default for SelectedDirectory {
                 name: "Dummy".into(),
                 path: PathBuf::default(),
                 children_directories: Vec::new(),
-                assets: Vec::new()
-            }
+                assets: Vec::new(),
+            },
         }
     }
 }
